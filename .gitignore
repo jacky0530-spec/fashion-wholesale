@@ -1,0 +1,16 @@
+# 環境變數（含 Supabase 金鑰，絕對不能上傳）
+.env
+.env.local
+.env.production
+
+# 依賴套件
+node_modules/
+
+# 建置產出
+dist/
+dist-ssr/
+
+# 編輯器
+.DS_Store
+.vscode/
+*.local
