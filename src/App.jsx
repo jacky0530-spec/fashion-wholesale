@@ -19,7 +19,7 @@ const NAV = [
   { section: '分析',  items: [{ path: '/reports',   label: '銷售報表', icon: '◆' }] },
 ]
 
-export default function App() {
+export default function App({ onLogout, loggingOut }) {
   const navigate  = useNavigate()
   const location  = useLocation()
   const [toast, setToast] = useState(null)
@@ -63,6 +63,7 @@ export default function App() {
               資料由 Neon 管理
             </div>
           </div>
+          <button type="button" className="sidebar-logout" onClick={onLogout} disabled={loggingOut}><span>{loggingOut ? '登出中…' : '登出帳號'}</span><span aria-hidden="true">↗</span></button>
         </div>
       </aside>
 
