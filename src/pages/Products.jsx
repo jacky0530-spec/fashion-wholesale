@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { useProducts, COLORS, SIZES, COLOR_MAP, CATEGORIES } from '../lib/data'
-import { uploadProductImage, deleteProductImage } from '../lib/storage'
+import { uploadProductImage } from '../lib/storage'
 
 export default function Products({ showToast }) {
   const { products, loading, addProduct, updateProduct, deleteProduct, saveVariants } = useProducts()
@@ -79,20 +79,7 @@ export default function Products({ showToast }) {
       // 有新圖片要上傳
       if (imgFile) {
         setUploadingImg(true)
-        // 若是編輯且有舊圖，先刪除
-        if (editing?.image_url) await deleteProductImage(editing.image_url)
-        // 需要先取得 product id（新增時先 insert 取得 id）
-        if (editing) {
-          image_url = await uploadProductImage(imgFile, editing.id)
-        } else {
-          // 新增：先 insert 取得 id，再上傳，再 update
-          const newId = await addProduct({ ...form, image_url: null })
-          image_url = await uploadProductImage(imgFile, newId)
-          await updateProduct(newId, { ...form, image_url })
-          showToast('款式已新增')
-          setShowModal(false)
-          return
-        }
+        image_url = await uploadProductImage(imgFile)
         setUploadingImg(false)
       }
 

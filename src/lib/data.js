@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from './supabase'
+import { request } from './api'
 
 export const COLOR_MAP = {
   '黑色': '#2a2a2a', '白色': '#e8e8e8', '米白': '#e8dcc8',
@@ -23,11 +23,9 @@ export function useProducts() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('products')
-      .select('*, variants:product_variants(*)')
-      .order('created_at', { ascending: false })
+    const { data, error } = await request('list', { table: 'products' })
     if (error) { setError(error.message); setLoading(false); return }
+    setError(null)
     setProducts(data || [])
     setLoading(false)
   }, [])
@@ -35,46 +33,36 @@ export function useProducts() {
   useEffect(() => { load() }, [load])
 
   const addProduct = async (form) => {
-    const { error } = await supabase.from('products').insert([{
+    const { data, error } = await request('insert', { table: 'products', record: {
       name: form.name, category: form.category,
       cost_price: +form.cost_price, wholesale_price: +form.wholesale_price,
-      retail_price: +form.retail_price, note: form.note || null,
-    }])
+      retail_price: +form.retail_price, image_url: form.image_url || null, note: form.note || null,
+    } })
     if (error) throw error
     await load()
+    return data[0].id
   }
 
   const updateProduct = async (id, form) => {
-    const { error } = await supabase.from('products').update({
+    const { error } = await request('update', { table: 'products', id, record: {
       name: form.name, category: form.category,
       cost_price: +form.cost_price, wholesale_price: +form.wholesale_price,
-      retail_price: +form.retail_price, note: form.note || null,
-    }).eq('id', id)
+      retail_price: +form.retail_price, image_url: form.image_url || null, note: form.note || null,
+    } })
     if (error) throw error
     await load()
   }
 
   const deleteProduct = async (id) => {
-    const { error } = await supabase.from('products').delete().eq('id', id)
+    const { error } = await request('delete', { table: 'products', id })
     if (error) throw error
     await load()
   }
 
-  // 儲存整批 variants（先刪後插）
+  // 以交易儲存規格，保留既有規格 ID
   const saveVariants = async (productId, variants) => {
-    const { error: delErr } = await supabase
-      .from('product_variants').delete().eq('product_id', productId)
-    if (delErr) throw delErr
-
-    if (variants.length > 0) {
-      const rows = variants.map(v => ({
-        product_id: productId,
-        color: v.color, size: v.size,
-        stock_qty: +v.stock_qty || 0,
-      }))
-      const { error: insErr } = await supabase.from('product_variants').insert(rows)
-      if (insErr) throw insErr
-    }
+    const { error } = await request('variants', { table: 'products', id: productId, variants })
+    if (error) throw error
     await load()
   }
 
@@ -90,8 +78,8 @@ export function useCustomers() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('customers').select('*').order('joined_at', { ascending: false })
+    const { data, error } = await request('list', { table: 'customers' })
+    if (error) { setLoading(false); return }
     setCustomers(data || [])
     setLoading(false)
   }, [])
@@ -99,29 +87,29 @@ export function useCustomers() {
   useEffect(() => { load() }, [load])
 
   const addCustomer = async (form) => {
-    const { error } = await supabase.from('customers').insert([{
+    const { error } = await request('insert', { table: 'customers', record: {
       name: form.name, shop_name: form.shop_name || null,
       line_nick: form.line_nick || null, phone: form.phone || null,
       address: form.address || null, customer_type: form.customer_type,
       credit_limit: +form.credit_limit || 0, note: form.note || null,
-    }])
+    } })
     if (error) throw error
     await load()
   }
 
   const updateCustomer = async (id, form) => {
-    const { error } = await supabase.from('customers').update({
+    const { error } = await request('update', { table: 'customers', id, record: {
       name: form.name, shop_name: form.shop_name || null,
       line_nick: form.line_nick || null, phone: form.phone || null,
       address: form.address || null, customer_type: form.customer_type,
       credit_limit: +form.credit_limit || 0, note: form.note || null,
-    }).eq('id', id)
+    } })
     if (error) throw error
     await load()
   }
 
   const deleteCustomer = async (id) => {
-    const { error } = await supabase.from('customers').delete().eq('id', id)
+    const { error } = await request('delete', { table: 'customers', id })
     if (error) throw error
     await load()
   }
@@ -138,14 +126,7 @@ export function useOrders() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        customer:customers(name, shop_name),
-        items:order_items(*)
-      `)
-      .order('order_date', { ascending: false })
+    const { data, error } = await request('list', { table: 'orders' })
     if (error) { setLoading(false); return }
     const enriched = (data || []).map(o => ({
       ...o,
@@ -159,46 +140,25 @@ export function useOrders() {
   useEffect(() => { load() }, [load])
 
   const addOrder = async ({ customer_id, total_amount, note, items }) => {
-    // Insert order
-    const { data: orderData, error: orderErr } = await supabase
-      .from('orders')
-      .insert([{ customer_id, total_amount, note: note || null }])
-      .select()
-      .single()
-    if (orderErr) throw orderErr
-
-    // Insert items
-    if (items.length > 0) {
-      const rows = items.map(i => ({
-        order_id: orderData.id,
-        variant_id: i.variant_id,
-        product_name: i.product_name,
-        color: i.color, size: i.size,
-        qty: i.qty, unit_price: i.price,
-      }))
-      const { error: itemErr } = await supabase.from('order_items').insert(rows)
-      if (itemErr) throw itemErr
-    }
+    const { error } = await request('createOrder', { table: 'orders', record: { customer_id, total_amount, note, items } })
+    if (error) throw error
     await load()
   }
 
   const updateOrder = async (id, patch) => {
-    const { error } = await supabase.from('orders').update(patch).eq('id', id)
+    const { error } = await request('update', { table: 'orders', id, record: patch })
     if (error) throw error
     await load()
   }
 
   const deleteOrder = async (id) => {
-    const { error } = await supabase.from('orders').delete().eq('id', id)
+    const { error } = await request('delete', { table: 'orders', id })
     if (error) throw error
     await load()
   }
 
   const shipOrders = async (ids) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: 'shipped', shipped_at: new Date().toISOString() })
-      .in('id', ids)
+    const { error } = await request('ship', { table: 'orders', ids })
     if (error) throw error
     await load()
   }
@@ -227,14 +187,7 @@ export function useReturns() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('returns')
-      .select(`
-        *,
-        customer:customers(name, shop_name),
-        order:orders(order_date)
-      `)
-      .order('created_at', { ascending: false })
+    const { data, error } = await request('list', { table: 'returns' })
     if (error) { setLoading(false); return }
     const enriched = (data || []).map(r => ({
       ...r,
@@ -248,7 +201,7 @@ export function useReturns() {
   useEffect(() => { load() }, [load])
 
   const addReturn = async (form) => {
-    const { error } = await supabase.from('returns').insert([{
+    const { error } = await request('insert', { table: 'returns', record: {
       order_id:      form.order_id || null,
       customer_id:   form.customer_id,
       product_name:  form.product_name,
@@ -260,22 +213,19 @@ export function useReturns() {
       refund_amount: +form.refund_amount || 0,
       note:          form.note || null,
       status:        'pending',
-    }])
+    } })
     if (error) throw error
     await load()
   }
 
   const updateReturnStatus = async (id, status, note) => {
-    const { error } = await supabase
-      .from('returns')
-      .update({ status, note: note || null, resolved_at: new Date().toISOString() })
-      .eq('id', id)
+    const { error } = await request('update', { table: 'returns', id, record: { status, note: note || null, resolved_at: new Date().toISOString() } })
     if (error) throw error
     await load()
   }
 
   const deleteReturn = async (id) => {
-    const { error } = await supabase.from('returns').delete().eq('id', id)
+    const { error } = await request('delete', { table: 'returns', id })
     if (error) throw error
     await load()
   }
