@@ -23,7 +23,17 @@ export default async function handler(req,res) {
   const b = typeof req.body==='string' ? JSON.parse(req.body) : (req.body || {})
   if(req.method==='POST' && req.headers.origin && new URL(req.headers.origin).host!==req.headers.host) fail('來源不符',403)
   const action = req.method==='GET' ? req.query?.action : b.action
-  if(action==='session') return res.status(200).json({data:{authenticated:authenticated(req)}})
+  if(action==='session') {
+   try {
+    const sql=neon(process.env.DATABASE_URL)
+    const [check]=await sql`SELECT bool_and(to_regclass('public.' || name) IS NOT NULL) AS ready FROM unnest(ARRAY['products','product_variants','customers','orders','order_items','returns']) AS t(name)`
+    if(!check.ready) fail('資料庫缺少必要資料表，請確認 DATABASE_URL 指向批發通的 Neon 資料庫。',503)
+   } catch(e) {
+    if(e.status) throw e
+    fail('無法連線資料庫，請確認 Production 的 DATABASE_URL 是有效的 Neon 連線字串。',503)
+   }
+   return res.status(200).json({data:{authenticated:authenticated(req),database_ready:true}})
+  }
   if(req.method!=='POST') fail('不支援的請求',405)
   if(action==='login') {
    if(typeof b.password!=='string' || !equal(b.password,process.env.ADMIN_PASSWORD)) fail('密碼不正確',401)
