@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS products (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name            text NOT NULL,
+  product_code    text,
   category        text NOT NULL DEFAULT '上衣',
   cost_price      numeric(10,2) NOT NULL DEFAULT 0,
   wholesale_price numeric(10,2) NOT NULL DEFAULT 0,

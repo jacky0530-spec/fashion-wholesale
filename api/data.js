@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 import { createHash, timingSafeEqual, createHmac, randomUUID } from 'node:crypto'
 const fields = {
- products: ['name','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
+ products: ['name','product_code','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
  customers: ['name','shop_name','line_nick','phone','address','customer_type','credit_limit','note'],
  orders: ['status','payment_status','shipped_at','note'],
  returns: ['order_id','customer_id','product_name','color','size','qty','return_type','reason','refund_amount','note','status','resolved_at']

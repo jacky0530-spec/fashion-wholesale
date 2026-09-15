@@ -13,25 +13,25 @@ export default function Products({ showToast }) {
   const [uploadingImg, setUploadingImg] = useState(false)
   const [imgPreview, setImgPreview] = useState(null)   // local preview URL
   const [imgFile, setImgFile] = useState(null)         // File object
-  const [form, setForm] = useState({ name: '', category: '上衣', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
+  const [form, setForm] = useState({ name: '', product_code: '', category: '上衣', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
   const [variantGrid, setVariantGrid] = useState({})
   const [selectedColors, setSelectedColors] = useState([])
   const [selectedSizes, setSelectedSizes] = useState(['S', 'M', 'L', 'XL'])
   const fileInputRef = useRef(null)
 
   const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) || p.category.includes(search)
+    p.name.toLowerCase().includes(search.toLowerCase()) || p.category.includes(search) || (p.product_code || '').toLowerCase().includes(search.toLowerCase())
   )
 
   const openAdd = () => {
     setEditing(null)
-    setForm({ name: '', category: '上衣', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
+    setForm({ name: '', product_code: '', category: '上衣', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
     setImgPreview(null); setImgFile(null)
     setShowModal(true)
   }
   const openEdit = (p) => {
     setEditing(p)
-    setForm({ name: p.name, category: p.category, cost_price: p.cost_price, wholesale_price: p.wholesale_price, retail_price: p.retail_price, note: p.note || '', image_url: p.image_url || '' })
+    setForm({ name: p.name, product_code: p.product_code || '', category: p.category, cost_price: p.cost_price, wholesale_price: p.wholesale_price, retail_price: p.retail_price, note: p.note || '', image_url: p.image_url || '' })
     setImgPreview(p.image_url || null); setImgFile(null)
     setShowModal(true)
   }
@@ -123,7 +123,7 @@ export default function Products({ showToast }) {
         <div className="toolbar">
           <div className="search-bar" style={{ width: 220 }}>
             <span className="search-icon">⊘</span>
-            <input placeholder="搜尋款式名稱或分類…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input placeholder="搜尋貨號、款式名稱或分類…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <button className="btn btn-primary" onClick={openAdd}>＋ 新增款式</button>
         </div>
@@ -160,6 +160,7 @@ export default function Products({ showToast }) {
                         </td>
                         <td>
                           <div style={{ fontWeight: 500 }}>{p.name}</div>
+                          {p.product_code && <div className="mono text-muted" style={{ fontSize: 12 }}>貨號：{p.product_code}</div>}
                           {p.note && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{p.note}</div>}
                         </td>
                         <td><span className="badge badge-gold">{p.category}</span></td>
@@ -273,6 +274,10 @@ export default function Products({ showToast }) {
                   <div className="form-group">
                     <label className="form-label">款式名稱 *</label>
                     <input className="form-control" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="例：韓版寬版西裝外套" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="product-code">貨號</label>
+                    <input id="product-code" className="form-control" type="text" value={form.product_code} onChange={e => setForm(f => ({ ...f, product_code: e.target.value }))} placeholder="例：SK-001（選填）" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">分類</label>

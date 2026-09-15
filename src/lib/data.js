@@ -11,7 +11,7 @@ export const COLOR_MAP = {
 }
 export const COLORS = Object.keys(COLOR_MAP)
 export const SIZES  = ['F', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL']
-export const CATEGORIES = ['上衣', '下著', '洋裝', '外套', '配件', '其他']
+export const CATEGORIES = ['上衣', '下著', '洋裝', '外套', '配件', '襪子', '其他']
 
 // ─────────────────────────────────────────────
 //  Products
@@ -34,7 +34,7 @@ export function useProducts() {
 
   const addProduct = async (form) => {
     const { data, error } = await request('insert', { table: 'products', record: {
-      name: form.name, category: form.category,
+      name: form.name, product_code: form.product_code?.trim() || null, category: form.category,
       cost_price: +form.cost_price, wholesale_price: +form.wholesale_price,
       retail_price: +form.retail_price, image_url: form.image_url || null, note: form.note || null,
     } })
@@ -45,7 +45,7 @@ export function useProducts() {
 
   const updateProduct = async (id, form) => {
     const { error } = await request('update', { table: 'products', id, record: {
-      name: form.name, category: form.category,
+      name: form.name, product_code: form.product_code?.trim() || null, category: form.category,
       cost_price: +form.cost_price, wholesale_price: +form.wholesale_price,
       retail_price: +form.retail_price, image_url: form.image_url || null, note: form.note || null,
     } })
