@@ -13,7 +13,7 @@ export default function Products({ showToast }) {
   const [uploadingImg, setUploadingImg] = useState(false)
   const [imgPreview, setImgPreview] = useState(null)   // local preview URL
   const [imgFile, setImgFile] = useState(null)         // File object
-  const [form, setForm] = useState({ name: '', product_code: '', category: '上衣', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
+  const [form, setForm] = useState({ name: '', product_code: '', category: '襪子', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
   const [variantGrid, setVariantGrid] = useState({})
   const [selectedColors, setSelectedColors] = useState([])
   const [selectedSizes, setSelectedSizes] = useState(['S', 'M', 'L', 'XL'])
@@ -25,7 +25,7 @@ export default function Products({ showToast }) {
 
   const openAdd = () => {
     setEditing(null)
-    setForm({ name: '', product_code: '', category: '上衣', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
+    setForm({ name: '', product_code: '', category: '襪子', cost_price: '', wholesale_price: '', retail_price: '', note: '', image_url: '' })
     setImgPreview(null); setImgFile(null)
     setShowModal(true)
   }
