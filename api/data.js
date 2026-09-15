@@ -17,7 +17,9 @@ function authenticated(req) {
 export default async function handler(req,res) {
  res.setHeader('Cache-Control','no-store')
  try {
-  if (!process.env.DATABASE_URL || !process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length<16) fail('尚未完成伺服器設定，請設定 DATABASE_URL 與至少 16 字元的 ADMIN_PASSWORD。',503)
+  if (!process.env.DATABASE_URL) fail('Production 缺少 DATABASE_URL，請於 Vercel 設定後重新部署。',503)
+  if (!process.env.ADMIN_PASSWORD) fail('Production 缺少 ADMIN_PASSWORD，請於 Vercel 設定後重新部署。',503)
+  if (process.env.ADMIN_PASSWORD.length<16) fail('ADMIN_PASSWORD 少於 16 字元，請延長管理密碼後重新部署。',503)
   const b = typeof req.body==='string' ? JSON.parse(req.body) : (req.body || {})
   if(req.method==='POST' && req.headers.origin && new URL(req.headers.origin).host!==req.headers.host) fail('來源不符',403)
   const action = req.method==='GET' ? req.query?.action : b.action
