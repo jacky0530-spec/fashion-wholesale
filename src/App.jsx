@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Products  from './pages/Products'
@@ -29,6 +29,8 @@ export default function App() {
     setTimeout(() => setToast(null), 3200)
   }
 
+  useEffect(() => { const onError = e => showToast(e.detail, 'error'); window.addEventListener('data-error', onError); return () => window.removeEventListener('data-error', onError) }, [])
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -55,10 +57,10 @@ export default function App() {
         </nav>
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-            <div>批發通 v1.2</div>
+            <div>批發通 v1.3</div>
             <div style={{ color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
-              已連線 Supabase
+              資料由 Neon 管理
             </div>
           </div>
         </div>

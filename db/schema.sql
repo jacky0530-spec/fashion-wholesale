@@ -1,16 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-
-export const supabase = createClient(supabaseUrl, supabaseKey)
-
-/*
-════════════════════════════════════════════════════════════
-  SQL Editor 建表語法（全部複製後一次執行）
-════════════════════════════════════════════════════════════
-
--- 1. 商品款式
 CREATE TABLE IF NOT EXISTS products (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name            text NOT NULL,
@@ -93,31 +80,8 @@ CREATE TABLE IF NOT EXISTS returns (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
--- 7. RLS
-ALTER TABLE products         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE customers        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orders           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE order_items      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE returns          ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "allow_all" ON products         FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all" ON product_variants FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all" ON customers        FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all" ON orders           FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all" ON order_items      FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all" ON returns          FOR ALL USING (true) WITH CHECK (true);
-
--- 8. Storage（在 Supabase Dashboard → Storage 建立 bucket）
--- Bucket name: product-images，勾選 Public bucket
--- 然後在 Storage → Policies 執行：
-
-CREATE POLICY "allow_public_read" ON storage.objects
-  FOR SELECT USING (bucket_id = 'product-images');
-CREATE POLICY "allow_upload" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'product-images');
-CREATE POLICY "allow_delete" ON storage.objects
-  FOR DELETE USING (bucket_id = 'product-images');
-CREATE POLICY "allow_update" ON storage.objects
-  FOR UPDATE USING (bucket_id = 'product-images');
-*/
+CREATE UNIQUE INDEX variants_product_color_size ON product_variants(product_id,color,size);
+CREATE INDEX orders_customer_idx ON orders(customer_id);
+CREATE INDEX items_order_idx ON order_items(order_id);
+CREATE INDEX returns_customer_idx ON returns(customer_id);
