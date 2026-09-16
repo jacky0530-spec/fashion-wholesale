@@ -72,15 +72,16 @@ export default async function handler(req,res) {
    data=await sql`SELECT settle_warehouse_consignment(${b.id}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
   } else if(action==='variants' && table==='products') {
    if(!Array.isArray(b.variants)||b.variants.length>500) fail('規格格式錯誤')
-   const rows=b.variants.map(v=>{if(!v.color||!v.size||!Number.isInteger(+v.stock_qty)||+v.stock_qty<0)fail('規格或庫存數量錯誤');return {color:v.color,size:v.size,stock_qty:+v.stock_qty}})
+   const rows=b.variants.map(v=>{if(!v.color||!v.size)fail('規格格式錯誤');return {color:v.color,size:v.size}})
    if(new Set(rows.map(v=>JSON.stringify([v.color,v.size]))).size!==rows.length) fail('規格重複')
    data=await sql.transaction([
     sql`SELECT id FROM products WHERE id=${b.id} FOR UPDATE`,
-    sql`DELETE FROM product_variants WHERE product_id=${b.id} AND NOT EXISTS (SELECT 1 FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(color text,size text,stock_qty integer) WHERE x.color=product_variants.color AND x.size=product_variants.size)`,
-    sql`INSERT INTO product_variants(product_id,color,size,stock_qty) SELECT ${b.id}::uuid,color,size,stock_qty FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(color text,size text,stock_qty integer) ON CONFLICT(product_id,color,size) DO UPDATE SET stock_qty=EXCLUDED.stock_qty RETURNING *`
+    sql`DELETE FROM product_variants WHERE product_id=${b.id} AND NOT EXISTS (SELECT 1 FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(color text,size text) WHERE x.color=product_variants.color AND x.size=product_variants.size)`,
+    sql`INSERT INTO product_variants(product_id,color,size,stock_qty) SELECT ${b.id}::uuid,color,size,0 FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(color text,size text) ON CONFLICT(product_id,color,size) DO UPDATE SET color=EXCLUDED.color RETURNING *`
    ])
   } else if(action==='createOrder' && table==='orders') {
    const f=b.record || {}
+   if(f.sale_mode==='consignment') fail('寄賣請到「庫存管理」先調撥到客戶倉，月底再用「寄賣月結」結帳')
    data=await sql`SELECT create_dealer_order(${f.customer_id}::uuid,${f.note||null},${JSON.stringify(f.items)}::jsonb,${f.discount}::numeric,${f.sale_mode}::text) AS id`
   } else if(action==='settle' && table==='orders') {
    data=await sql`SELECT settle_consignment(${b.id}::uuid,${b.revision}::integer,${JSON.stringify(b.items)}::jsonb)`
