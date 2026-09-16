@@ -15,13 +15,13 @@ await ok('login',{password:process.env.ADMIN_PASSWORD})
 assert.equal((await ok('session')).authenticated,true)
 let product,customer,order,ret
 try {
- ;[product]=await ok('insert',{table:'products',record:{name:'Migration verification '+randomUUID(),image_url:'data:image/png;base64,iVBORw0KGgo='}})
- ;[customer]=await ok('insert',{table:'customers',record:{name:'Migration verification'}})
+ ;[product]=await ok('insert',{table:'products',record:{name:'Migration verification '+randomUUID(),retail_price:100,image_url:'data:image/png;base64,iVBORw0KGgo='}})
+ ;[customer]=await ok('insert',{table:'customers',record:{name:'Migration verification',discount:10,sale_mode:'buyout'}})
  await ok('variants',{table:'products',id:product.id,variants:[{color:'黑色',size:'M',stock_qty:10}]})
  let p=(await ok('list',{table:'products'})).find(x=>x.id===product.id)
  const variant=p.variants[0]
  assert.ok(p.image_url)
- const record={customer_id:customer.id,total_amount:1,items:[{variant_id:variant.id,qty:2,price:100,product_name:p.name,color:'黑色',size:'M'}]}
+ const record={customer_id:customer.id,total_amount:1,discount:10,sale_mode:'buyout',items:[{variant_id:variant.id,qty:2,price:100,product_name:p.name,color:'黑色',size:'M'}]}
  await ok('createOrder',{table:'orders',record})
  order=(await ok('list',{table:'orders'})).find(x=>x.customer_id===customer.id)
  assert.equal(Number(order.total_amount),200);assert.equal(order.items.length,1)
@@ -33,7 +33,7 @@ try {
  assert.equal(p.variants[0].id,variant.id);assert.equal(p.variants[0].stock_qty,9)
  assert.equal((await call('variants',{table:'products',id:product.id,variants:[]})).code,400)
  await ok('ship',{table:'orders',ids:[order.id]})
- await ok('update',{table:'orders',id:order.id,record:{payment_status:'paid'}})
+ await ok('collect',{table:'orders',id:order.id,revision:order.revision,paid:true})
  ;[ret]=await ok('insert',{table:'returns',record:{customer_id:customer.id,order_id:order.id,product_name:p.name,qty:1}})
  await ok('update',{table:'returns',id:ret.id,record:{status:'completed'}})
  assert.equal((await ok('list',{table:'returns'})).find(x=>x.id===ret.id).status,'completed')

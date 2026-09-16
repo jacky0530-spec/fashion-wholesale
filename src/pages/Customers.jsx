@@ -7,7 +7,7 @@ export default function Customers({ showToast }) {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', credit_limit: '', note: '' })
+  const [form, setForm] = useState({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: '', credit_limit: '', note: '' })
 
   const filtered = customers.filter(c =>
     c.name.includes(search) || (c.shop_name || '').includes(search) ||
@@ -16,13 +16,14 @@ export default function Customers({ showToast }) {
 
   const openAdd = () => {
     setEditing(null)
-    setForm({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', credit_limit: '', note: '' })
+    setForm({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: '', credit_limit: '', note: '' })
     setShowModal(true)
   }
-  const openEdit = (c) => { setEditing(c); setForm({ ...c, credit_limit: c.credit_limit || '' }); setShowModal(true) }
+  const openEdit = (c) => { setEditing(c); setForm({ ...c, sale_mode: c.sale_mode || 'buyout', discount: c.discount ?? '', credit_limit: c.credit_limit || '' }); setShowModal(true) }
 
   const handleSave = async () => {
     if (!form.name.trim()) return
+    if (form.discount === '' || +form.discount <= 0 || +form.discount > 10) { showToast('折數請輸入 0.01～10，例如六五折填 6.5', 'error'); return }
     setSaving(true)
     try {
       if (editing) { await updateCustomer(editing.id, form); showToast('客戶資料已更新') }
@@ -80,8 +81,9 @@ export default function Customers({ showToast }) {
                     <td className="mono" style={{ color: 'var(--text2)' }}>{c.phone || '—'}</td>
                     <td>
                       <span className={`badge ${c.customer_type === 'wholesale' ? 'badge-gold' : 'badge-blue'}`}>
-                        {c.customer_type === 'wholesale' ? '批發' : '零售'}
+                        {c.customer_type === 'wholesale' ? '經銷商' : '零售'}
                       </span>
+                      <div style={{ fontSize: 12, marginTop: 5 }}>{c.sale_mode === 'consignment' ? '寄賣' : '買斷'} · {c.discount == null ? '未設定折數' : `零售價 ${Number(c.discount)} 折`}</div>
                     </td>
                     <td className="mono" style={{ color: +c.credit_limit > 0 ? 'var(--gold)' : 'var(--text3)' }}>
                       {+c.credit_limit > 0 ? `NT$ ${(+c.credit_limit).toLocaleString()}` : '—'}
@@ -139,7 +141,7 @@ export default function Customers({ showToast }) {
                 <div className="form-group">
                   <label className="form-label">客戶類型</label>
                   <select className="form-control" value={form.customer_type} onChange={e => setForm(f => ({ ...f, customer_type: e.target.value }))}>
-                    <option value="wholesale">批發商</option>
+                    <option value="wholesale">經銷商</option>
                     <option value="retail">零售客戶</option>
                   </select>
                 </div>
@@ -148,6 +150,11 @@ export default function Customers({ showToast }) {
                   <input className="form-control" type="number" value={form.credit_limit} onChange={e => setForm(f => ({ ...f, credit_limit: e.target.value }))} placeholder="50000" />
                 </div>
               </div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label" htmlFor="sale-mode">合作方式</label><select id="sale-mode" className="form-control" value={form.sale_mode} onChange={e => setForm(f => ({ ...f, sale_mode: e.target.value }))}><option value="buyout">買斷</option><option value="consignment">寄賣（售出才收款）</option></select></div>
+                <div className="form-group"><label className="form-label" htmlFor="discount">零售價折數 *</label><input id="discount" className="form-control" type="number" min="0.01" max="10" step="0.01" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} placeholder="六五折填 6.5" /><small>6＝六折；6.5＝六五折；10＝原價</small></div>
+              </div>
+              <p style={{ marginBottom: 16, color: 'var(--text2)' }}>零售價 100 元 → 單價 {form.discount === '' ? '—' : (100 * +form.discount / 10).toFixed(2)} 元。變更條件僅適用新單。</p>
               <div className="form-group">
                 <label className="form-label">備註</label>
                 <input className="form-control" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="例：每週三固定下單" />

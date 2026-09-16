@@ -1,3 +1,4 @@
+import { outstanding } from '../lib/accounting'
 import React from 'react'
 import { useDashboardStats, useOrders, useProducts, useCustomers } from '../lib/data'
 
@@ -86,7 +87,7 @@ export default function Dashboard() {
                       {(+o.total_amount).toLocaleString()}
                     </td>
                     <td><span className={`badge ${STATUS_LABEL[o.status]?.cls}`}>{STATUS_LABEL[o.status]?.label}</span></td>
-                    <td><span className={`badge ${PAY_LABEL[o.payment_status]?.cls}`}>{PAY_LABEL[o.payment_status]?.label}</span></td>
+                    <td><span className={`badge ${PAY_LABEL[o.payment_status]?.cls}`}>{o.sale_mode === 'consignment' && +o.total_amount === 0 ? '寄賣未售' : o.sale_mode === 'consignment' && outstanding(o) > 0 ? '待收款' : PAY_LABEL[o.payment_status]?.label}</span></td>
                   </tr>
                 ))}
               </tbody>

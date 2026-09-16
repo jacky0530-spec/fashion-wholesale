@@ -1,13 +1,18 @@
 import React, { useState } from 'react'
 import { useOrders, useProducts, useCustomers, COLOR_MAP } from '../lib/data'
 
+import { dealerPrice, collected, outstanding, modeLabel } from '../lib/accounting'
+import ConsignmentModal from './ConsignmentModal'
+
 const STATUS = { pending: { label: '待出貨', cls: 'badge-amber' }, shipped: { label: '已出貨', cls: 'badge-blue' }, returned: { label: '退貨', cls: 'badge-red' } }
 const PAY    = { unpaid:  { label: '未收款', cls: 'badge-red'   }, paid:    { label: '已收款', cls: 'badge-green' } }
 
 export default function Orders({ showToast }) {
-  const { orders, loading, addOrder, updateOrder, deleteOrder, shipOrders } = useOrders()
+  const { orders, loading, addOrder, deleteOrder, shipOrders, settleOrder, collectOrder } = useOrders()
   const { products } = useProducts()
   const { customers } = useCustomers()
+  const [settlement, setSettlement] = useState(null)
+  const [actionBusy, setActionBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterPay, setFilterPay] = useState('all')
@@ -29,7 +34,7 @@ export default function Orders({ showToast }) {
   const filtered = orders.filter(o => {
     const matchSearch = o.customer_name.includes(search) || (o.shop_name || '').includes(search)
     const matchStatus = filterStatus === 'all' || o.status === filterStatus
-    const matchPay    = filterPay    === 'all' || o.payment_status === filterPay
+    const matchPay    = filterPay    === 'all' || (filterPay === 'paid' ? o.payment_status === 'paid' : outstanding(o) > 0)
     return matchSearch && matchStatus && matchPay
   })
 
@@ -43,11 +48,12 @@ export default function Orders({ showToast }) {
   }
 
   const addToCart = (variant) => {
-    const price = selectedCustomer?.customer_type === 'retail' ? +selectedProduct.retail_price : +selectedProduct.wholesale_price
+    if (!selectedCustomer || selectedCustomer.discount == null) { showToast('請先選擇已設定折數的客戶', 'error'); return }
+    const price = dealerPrice(selectedProduct.retail_price, selectedCustomer.discount)
     setCartItems(prev => {
       const idx = prev.findIndex(i => i.variant_id === variant.id)
       if (idx !== -1) { const u = [...prev]; u[idx] = { ...u[idx], qty: u[idx].qty + 1 }; return u }
-      return [...prev, { variant_id: variant.id, color: variant.color, size: variant.size, product_name: selectedProduct.name, qty: 1, price }]
+      return [...prev, { variant_id: variant.id, color: variant.color, size: variant.size, product_name: selectedProduct.name, retail_price: +selectedProduct.retail_price, qty: 1, price }]
     })
   }
 
@@ -57,26 +63,39 @@ export default function Orders({ showToast }) {
   }
 
   const handleSubmit = async () => {
-    if (!custId || cartItems.length === 0) return
+    if (!custId || selectedCustomer?.discount == null || cartItems.length === 0) return
     setSaving(true)
     try {
-      await addOrder({ customer_id: custId, total_amount: cartTotal, note: orderNote, items: cartItems })
+      await addOrder({ customer_id: custId, total_amount: cartTotal, note: orderNote, items: cartItems, discount: +selectedCustomer.discount, sale_mode: selectedCustomer.sale_mode })
       showToast('訂單已建立')
       setShowModal(false)
     } catch(e) { showToast(e.message, 'error') }
     finally { setSaving(false) }
   }
 
+  const chooseCustomer = c => {
+    setCustId(c.id); setCustSearch(c.name + (c.shop_name ? ` (${c.shop_name})` : '')); setShowCustDrop(false)
+    setCartItems(items => items.map(i => ({ ...i, price: c.discount == null ? 0 : dealerPrice(i.retail_price, c.discount) })))
+  }
+  const receivePayment = async o => {
+    if (actionBusy) return
+    const paid = o.sale_mode === 'consignment' || o.payment_status !== 'paid'
+    if (!confirm(paid ? `確認已收到 ${outstanding(o).toLocaleString()} 元？` : '取消此買斷單的收款標記？')) return
+    setActionBusy(true)
+    try { await collectOrder(o, paid); showToast(paid ? '收款已登記' : '已取消收款') }
+    catch(e) { showToast(e.message, 'error') }
+    finally { setActionBusy(false) }
+  }
   const toggleSelect = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   const toggleAll = () => setSelected(selected.length === filtered.length ? [] : filtered.map(o => o.id))
 
   const handleBatchShip = async () => {
     const toShip = selected.filter(id => orders.find(o => o.id === id)?.status === 'pending')
     if (!toShip.length) { showToast('沒有待出貨的訂單', 'error'); return }
-    await shipOrders(toShip); showToast(`${toShip.length} 筆訂單已出貨`); setSelected([])
+    try { await shipOrders(toShip); showToast(`${toShip.length} 筆訂單已出貨`); setSelected([]) } catch(e) { showToast(e.message, 'error') }
   }
 
-  const filteredProds  = products.filter(p => p.name.includes(prodSearch) || p.category.includes(prodSearch))
+  const filteredProds  = products.filter(p => p.name.includes(prodSearch) || p.category.includes(prodSearch) || (p.product_code || '').includes(prodSearch))
   const filteredCusts  = customers.filter(c => c.name.includes(custSearch) || (c.shop_name || '').includes(custSearch))
 
   const DropDown = ({ children, style }) => (
@@ -134,7 +153,7 @@ export default function Orders({ showToast }) {
                   <th style={{ width: 36 }}>
                     <input type="checkbox" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} style={{ cursor: 'pointer' }} />
                   </th>
-                  <th>客戶</th><th>日期</th><th>品項</th><th>金額</th><th>出貨</th><th>收款</th><th>備註</th>
+                  <th>客戶</th><th>日期</th><th>品項</th><th>貨值／應收</th><th>出貨</th><th>收款</th><th>備註</th>
                   <th style={{ textAlign: 'right' }}>操作</th>
                 </tr>
               </thead>
@@ -147,7 +166,7 @@ export default function Orders({ showToast }) {
                   <tr key={o.id}>
                     <td><input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleSelect(o.id)} style={{ cursor: 'pointer' }} /></td>
                     <td>
-                      <div style={{ fontWeight: 500 }}>{o.customer_name}</div>
+                      <div style={{ fontWeight: 500 }}>{o.customer_name}</div><div className="badge badge-gold">{modeLabel(o.sale_mode)}{o.discount != null ? ` · 零售價 ${Number(o.discount)} 折` : ' · 舊單價格'}</div>
                       {o.shop_name && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{o.shop_name}</div>}
                     </td>
                     <td className="mono" style={{ color: 'var(--text2)', whiteSpace: 'nowrap' }}>
@@ -159,26 +178,22 @@ export default function Orders({ showToast }) {
                           <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLOR_MAP[it.color] || '#888', border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0 }} />
                           <span style={{ color: 'var(--text2)' }}>{it.product_name}</span>
                           <span className="size-chip" style={{ fontSize: 10, width: 22, height: 18 }}>{it.size}</span>
-                          <span style={{ color: 'var(--text3)' }}>×{it.qty}</span>
+                          <span style={{ color: 'var(--text3)' }}>×{it.qty}{o.sale_mode === 'consignment' ? `（售 ${it.sold_qty}／退 ${it.returned_qty}／餘 ${it.qty-it.sold_qty-it.returned_qty}）` : ''}</span>
                         </div>
                       ))}
                     </td>
-                    <td className="mono text-gold" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>NT$ {(+o.total_amount).toLocaleString()}</td>
+                    <td className="mono text-gold" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>應收 {(+o.total_amount).toLocaleString()}<div style={{ fontSize: 11, color: 'var(--text2)' }}>貨值 {Number(o.goods_amount ?? o.total_amount).toLocaleString()}<br />已收 {collected(o).toLocaleString()}／待收 {outstanding(o).toLocaleString()}</div></td>
                     <td><span className={`badge ${STATUS[o.status]?.cls}`}>{STATUS[o.status]?.label}</span></td>
                     <td>
-                      <button
-                        onClick={() => { updateOrder(o.id, { payment_status: o.payment_status === 'paid' ? 'unpaid' : 'paid' }); showToast(o.payment_status === 'unpaid' ? '已標記收款' : '已取消收款') }}
-                        className={`badge ${PAY[o.payment_status]?.cls}`}
-                        style={{ cursor: 'pointer', border: 'none', fontFamily: 'inherit' }}
-                        title="點擊切換"
-                      >{PAY[o.payment_status]?.label}</button>
+                      <button className="btn btn-ghost btn-sm" disabled={actionBusy || (o.sale_mode === 'consignment' && outstanding(o) <= 0)} onClick={() => receivePayment(o)}>{o.sale_mode === 'consignment' ? (outstanding(o) > 0 ? '登記收款' : +o.total_amount === 0 ? '尚無售出應收' : '已收款') : o.payment_status === 'paid' ? '已收款（取消）' : '登記收款'}</button>
                     </td>
                     <td style={{ color: 'var(--text3)', fontSize: 12 }}>{o.note || '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => setShowReceipt([o])}>◎</button>
-                        {o.status === 'pending' && <button className="btn btn-ghost btn-sm" onClick={() => { shipOrders([o.id]); showToast('已出貨') }}>出貨</button>}
-                        <button className="btn btn-danger btn-sm" onClick={async () => { if (confirm('刪除此訂單？')) { await deleteOrder(o.id); showToast('已刪除') } }}>✕</button>
+                        {o.sale_mode === 'consignment' && o.status === 'shipped' && <button className="btn btn-primary btn-sm" onClick={() => setSettlement(o)}>售出／退回</button>}
+                        {o.status === 'pending' && <button className="btn btn-ghost btn-sm" onClick={async () => { try { await shipOrders([o.id]); showToast('已出貨') } catch(e) { showToast(e.message, 'error') } }}>出貨</button>}
+                        <button className="btn btn-danger btn-sm" onClick={async () => { if (confirm('刪除此訂單？')) { try { await deleteOrder(o.id); showToast('已刪除') } catch(e) { showToast(e.message, 'error') } } }}>✕</button>
                       </div>
                     </td>
                   </tr>
@@ -188,6 +203,8 @@ export default function Orders({ showToast }) {
           </div>
         </div>
       </div>
+
+      {settlement && <ConsignmentModal order={settlement} onSave={settleOrder} onClose={() => setSettlement(null)} showToast={showToast} />}
 
       {/* New Order Modal */}
       {showModal && (
@@ -212,11 +229,11 @@ export default function Orders({ showToast }) {
                     {showCustDrop && filteredCusts.length > 0 && (
                       <DropDown>
                         {filteredCusts.map(c => (
-                          <DropItem key={c.id} onMouseDown={() => { setCustId(c.id); setCustSearch(c.name + (c.shop_name ? ` (${c.shop_name})` : '')) }}>
+                          <DropItem key={c.id} onMouseDown={() => chooseCustomer(c)}>
                             {c.name}
                             {c.shop_name && <span style={{ color: 'var(--text3)', marginLeft: 6, fontSize: 11 }}>{c.shop_name}</span>}
                             <span className={`badge ${c.customer_type === 'wholesale' ? 'badge-gold' : 'badge-blue'}`} style={{ marginLeft: 8, fontSize: 10 }}>
-                              {c.customer_type === 'wholesale' ? '批發' : '零售'}
+                              {modeLabel(c.sale_mode)} · {c.discount == null ? '未設定折數' : `${Number(c.discount)} 折`}
                             </span>
                           </DropItem>
                         ))}
@@ -224,7 +241,8 @@ export default function Orders({ showToast }) {
                     )}
                   </div>
 
-                  <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>選擇商品</div>
+                  {selectedCustomer && <p style={{ marginBottom: 16, color: selectedCustomer.discount == null ? 'var(--red)' : 'var(--text2)' }}>{selectedCustomer.discount == null ? '請先到客戶管理設定折數，才能開立銷貨單。' : `${modeLabel(selectedCustomer.sale_mode)} · 零售價 × ${Number(selectedCustomer.discount)} ÷ 10${selectedCustomer.sale_mode === 'consignment' ? '；本次寄放不產生應收，售出後再結算。' : ''}`}</p>}
+                  <div>選擇商品</div>
                   <div style={{ position: 'relative', marginBottom: 12 }}>
                     <input className="form-control" placeholder="搜尋款式…"
                       value={prodSearch}
@@ -237,7 +255,7 @@ export default function Orders({ showToast }) {
                         {filteredProds.map(p => (
                           <DropItem key={p.id} onMouseDown={() => { setSelectedProduct(p); setProdSearch(p.name); setShowProdDrop(false) }}>
                             {p.name}
-                            <span style={{ color: 'var(--gold)', marginLeft: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}>NT$ {+p.wholesale_price}</span>
+                            <span style={{ color: 'var(--gold)', marginLeft: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{selectedCustomer?.discount != null ? `NT$ ${dealerPrice(p.retail_price, selectedCustomer.discount)}` : `零售價 ${p.retail_price}`}</span>
                           </DropItem>
                         ))}
                       </DropDown>
@@ -261,7 +279,7 @@ export default function Orders({ showToast }) {
                                 const v = (selectedProduct.variants || []).find(vv => vv.color === color && vv.size === size)
                                 if (!v) return null
                                 return (
-                                  <button key={size} disabled={+v.stock_qty === 0} onClick={() => addToCart(v)}
+                                  <button key={size} disabled={+v.stock_qty === 0 || selectedCustomer?.discount == null} onClick={() => addToCart(v)}
                                     style={{
                                       display: 'flex', flexDirection: 'column', alignItems: 'center',
                                       padding: '4px 9px', borderRadius: 4, cursor: +v.stock_qty === 0 ? 'not-allowed' : 'pointer',
@@ -281,7 +299,7 @@ export default function Orders({ showToast }) {
                         ))
                       })()}
                       <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-                        {selectedCustomer?.customer_type === 'retail' ? '零售價' : '批發價'}：NT$ {selectedCustomer?.customer_type === 'retail' ? +selectedProduct.retail_price : +selectedProduct.wholesale_price}
+                        零售價 {selectedProduct.retail_price} 元 → 折後單價 {selectedCustomer?.discount == null ? '—' : dealerPrice(selectedProduct.retail_price, selectedCustomer.discount)} 元
                       </div>
                     </div>
                   )}
@@ -331,8 +349,8 @@ export default function Orders({ showToast }) {
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setShowModal(false)}>取消</button>
-              <button className="btn btn-primary" disabled={!custId || cartItems.length === 0 || saving} onClick={handleSubmit}>
-                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : `建立訂單 NT$ ${cartTotal.toLocaleString()}`}
+              <button className="btn btn-primary" disabled={!custId || selectedCustomer?.discount == null || cartItems.length === 0 || saving} onClick={handleSubmit}>
+                {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : `建立${selectedCustomer?.sale_mode === 'consignment' ? '寄賣單（貨值）' : '銷貨單'} NT$ ${cartTotal.toLocaleString()}`}
               </button>
             </div>
           </div>
@@ -358,7 +376,7 @@ export default function Orders({ showToast }) {
                 <div key={o.id} style={{ marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>{o.customer_name}</div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>{o.customer_name}</div><p>{modeLabel(o.sale_mode)} · {o.discount == null ? '舊單價格' : `零售價 ${Number(o.discount)} 折`}</p>
                       {o.shop_name && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{o.shop_name}</div>}
                     </div>
                     <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
@@ -395,7 +413,7 @@ export default function Orders({ showToast }) {
                   </table>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, gap: 16, alignItems: 'center' }}>
                     {o.note && <span style={{ fontSize: 12, color: 'var(--text3)' }}>備註：{o.note}</span>}
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--gold)' }}>NT$ {(+o.total_amount).toLocaleString()}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--gold)' }}>貨值 {Number(o.goods_amount ?? o.total_amount).toLocaleString()} 元<br />{o.sale_mode === 'consignment' ? '已售應收' : '應收'} {(+o.total_amount).toLocaleString()} 元<br />已收 {collected(o).toLocaleString()}／待收 {outstanding(o).toLocaleString()}</span>
                   </div>
                 </div>
               ))}

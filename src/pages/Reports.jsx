@@ -1,3 +1,4 @@
+import { collected, outstanding, salesQty } from '../lib/accounting'
 import React, { useState } from 'react'
 import { useOrders, useProducts, useCustomers, COLOR_MAP } from '../lib/data'
 import { exportOrders, exportReceivables, exportInventory, exportTopProducts } from '../lib/excel'
@@ -10,18 +11,18 @@ export default function Reports({ showToast }) {
   const [tab, setTab] = useState('revenue')
   const [pdfLoading, setPdfLoading] = useState(false)
 
-  const paid   = orders.filter(o => o.payment_status === 'paid')
-  const unpaid = orders.filter(o => o.payment_status === 'unpaid' && o.status === 'shipped')
-  const totalRevenue  = paid.reduce((s, o) => s + +o.total_amount, 0)
-  const totalUnpaid   = unpaid.reduce((s, o) => s + +o.total_amount, 0)
+  const paid   = orders.filter(o => collected(o) > 0)
+  const unpaid = orders.filter(o => outstanding(o) > 0 && o.status === 'shipped')
+  const totalRevenue  = paid.reduce((s, o) => s + collected(o), 0)
+  const totalUnpaid   = unpaid.reduce((s, o) => s + outstanding(o), 0)
   const totalSalesAmt = orders.reduce((s, o) => s + +o.total_amount, 0)
 
   const productSales = {}
   orders.forEach(o => (o.items || []).forEach(item => {
     const k = item.product_name
     if (!productSales[k]) productSales[k] = { name: k, qty: 0, amount: 0 }
-    productSales[k].qty    += +item.qty
-    productSales[k].amount += +item.qty * +item.unit_price
+    productSales[k].qty    += salesQty(o, item)
+    productSales[k].amount += salesQty(o, item) * +item.unit_price
   }))
   const topProducts = Object.values(productSales).sort((a, b) => b.amount - a.amount)
   const maxProdAmt  = topProducts[0]?.amount || 1
@@ -36,8 +37,8 @@ export default function Reports({ showToast }) {
 
   const colorSales = {}; const sizeSales = {}
   orders.forEach(o => (o.items || []).forEach(item => {
-    colorSales[item.color] = (colorSales[item.color] || 0) + +item.qty
-    sizeSales[item.size]   = (sizeSales[item.size]   || 0) + +item.qty
+    colorSales[item.color] = (colorSales[item.color] || 0) + salesQty(o, item)
+    sizeSales[item.size]   = (sizeSales[item.size]   || 0) + salesQty(o, item)
   }))
   const topColors   = Object.entries(colorSales).sort((a, b) => b[1] - a[1])
   const topSizes    = Object.entries(sizeSales).sort((a, b) => b[1] - a[1])
@@ -199,7 +200,7 @@ export default function Reports({ showToast }) {
                         <td className="mono" style={{ color: 'var(--text2)' }}>
                           {o.shipped_at ? new Date(o.shipped_at).toLocaleDateString('zh-TW') : '—'}
                         </td>
-                        <td className="mono" style={{ color: 'var(--red)', fontWeight: 700 }}>NT$ {(+o.total_amount).toLocaleString()}</td>
+                        <td className="mono" style={{ color: 'var(--red)', fontWeight: 700 }}>NT$ {outstanding(o).toLocaleString()}</td>
                         <td>
                           {days !== null && (
                             <span className={`badge ${days > 30 ? 'badge-red' : days > 14 ? 'badge-amber' : 'badge-blue'}`}>

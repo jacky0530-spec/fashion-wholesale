@@ -1,3 +1,4 @@
+import { collected, outstanding, salesQty, modeLabel } from './accounting'
 // ── Excel 匯出工具（使用原生 CSV + BOM，無需額外套件）──────────
 // 若需要真正的 .xlsx 格式，改用 SheetJS (xlsx) 套件
 
@@ -27,49 +28,19 @@ const today = () => new Date().toLocaleDateString('zh-TW').replace(/\//g, '-')
 
 // ── 1. 訂單報表 ─────────────────────────────────────────────
 export function exportOrders(orders) {
-  const headers = ['訂單日期','客戶姓名','店家名稱','品項','顏色','尺碼','數量','單價','訂單金額','出貨狀態','收款狀態','備註']
-  const STATUS  = { pending: '待出貨', shipped: '已出貨', returned: '退貨' }
-  const PAY     = { unpaid: '未收款', paid: '已收款' }
-
-  const rows = []
-  orders.forEach(o => {
-    const items = o.items || []
-    if (items.length === 0) {
-      rows.push([
-        new Date(o.order_date).toLocaleDateString('zh-TW'),
-        o.customer_name, o.shop_name || '',
-        '', '', '', '', '',
-        +o.total_amount,
-        STATUS[o.status] || o.status,
-        PAY[o.payment_status] || o.payment_status,
-        o.note || ''
-      ])
-    } else {
-      items.forEach((item, i) => {
-        rows.push([
-          i === 0 ? new Date(o.order_date).toLocaleDateString('zh-TW') : '',
-          i === 0 ? o.customer_name : '',
-          i === 0 ? (o.shop_name || '') : '',
-          item.product_name || '',
-          item.color || '',
-          item.size || '',
-          item.qty,
-          +item.unit_price,
-          i === 0 ? +o.total_amount : '',
-          i === 0 ? (STATUS[o.status] || o.status) : '',
-          i === 0 ? (PAY[o.payment_status] || o.payment_status) : '',
-          i === 0 ? (o.note || '') : ''
-        ])
-      })
-    }
-  })
-
+  const headers = ['訂單日期','客戶','店家','合作方式','零售價折數','品項','顏色','尺碼','寄放或買斷數量','累計售出','未售退回','尚餘寄放','成交單價','單據貨值','售出應收／買斷應收','已收款','待收款','備註']
+  const rows = orders.flatMap(o => (o.items?.length ? o.items : [{}]).map((item, i) => [
+    i === 0 ? new Date(o.order_date).toLocaleDateString('zh-TW') : '', i === 0 ? o.customer_name : '', i === 0 ? o.shop_name || '' : '',
+    i === 0 ? modeLabel(o.sale_mode) : '', i === 0 ? o.discount ?? '舊單價格' : '', item.product_name || '', item.color || '', item.size || '', item.qty ?? '',
+    salesQty(o, item) || 0, item.returned_qty || 0, o.sale_mode === 'consignment' ? item.qty - item.sold_qty - item.returned_qty : '', item.unit_price ?? '',
+    i === 0 ? Number(o.goods_amount ?? o.total_amount) : '', i === 0 ? Number(o.total_amount) : '', i === 0 ? collected(o) : '', i === 0 ? outstanding(o) : '', i === 0 ? o.note || '' : ''
+  ]))
   download(toCSV(headers, rows), `訂單報表_${today()}.csv`)
 }
 
 // ── 2. 應收帳款報表 ──────────────────────────────────────────
 export function exportReceivables(orders) {
-  const unpaid = orders.filter(o => o.payment_status === 'unpaid' && o.status === 'shipped')
+  const unpaid = orders.filter(o => outstanding(o) > 0 && o.status === 'shipped')
   const headers = ['客戶姓名','店家名稱','訂單日期','出貨日期','金額','天數']
 
   const rows = unpaid.map(o => {
@@ -81,13 +52,13 @@ export function exportReceivables(orders) {
       o.shop_name || '',
       orderDate.toLocaleDateString('zh-TW'),
       shippedDate ? shippedDate.toLocaleDateString('zh-TW') : '',
-      +o.total_amount,
+      outstanding(o),
       days
     ]
   })
 
   // 加合計列
-  const total = unpaid.reduce((s, o) => s + +o.total_amount, 0)
+  const total = unpaid.reduce((s, o) => s + outstanding(o), 0)
   rows.push(['', '', '', '合計', total, ''])
 
   download(toCSV(headers, rows), `應收帳款_${today()}.csv`)
@@ -126,8 +97,8 @@ export function exportTopProducts(orders) {
     ;(o.items || []).forEach(item => {
       const k = item.product_name
       if (!productSales[k]) productSales[k] = { name: k, qty: 0, amount: 0 }
-      productSales[k].qty    += +item.qty
-      productSales[k].amount += +item.qty * +item.unit_price
+      productSales[k].qty    += salesQty(o, item)
+      productSales[k].amount += salesQty(o, item) * +item.unit_price
     })
   })
 

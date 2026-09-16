@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { request } from './api'
+import { collected, outstanding } from './accounting'
 
 export const COLOR_MAP = {
   '黑色': '#2a2a2a', '白色': '#e8e8e8', '米白': '#e8dcc8',
@@ -91,6 +92,7 @@ export function useCustomers() {
       name: form.name, shop_name: form.shop_name || null,
       line_nick: form.line_nick || null, phone: form.phone || null,
       address: form.address || null, customer_type: form.customer_type,
+      sale_mode: form.sale_mode, discount: form.discount === '' ? null : Number(form.discount),
       credit_limit: +form.credit_limit || 0, note: form.note || null,
     } })
     if (error) throw error
@@ -102,6 +104,7 @@ export function useCustomers() {
       name: form.name, shop_name: form.shop_name || null,
       line_nick: form.line_nick || null, phone: form.phone || null,
       address: form.address || null, customer_type: form.customer_type,
+      sale_mode: form.sale_mode, discount: form.discount === '' ? null : Number(form.discount),
       credit_limit: +form.credit_limit || 0, note: form.note || null,
     } })
     if (error) throw error
@@ -139,8 +142,8 @@ export function useOrders() {
 
   useEffect(() => { load() }, [load])
 
-  const addOrder = async ({ customer_id, total_amount, note, items }) => {
-    const { error } = await request('createOrder', { table: 'orders', record: { customer_id, total_amount, note, items } })
+  const addOrder = async ({ customer_id, total_amount, note, items, discount, sale_mode }) => {
+    const { error } = await request('createOrder', { table: 'orders', record: { customer_id, total_amount, note, items, discount, sale_mode } })
     if (error) throw error
     await load()
   }
@@ -163,15 +166,25 @@ export function useOrders() {
     await load()
   }
 
-  return { orders, loading, load, addOrder, updateOrder, deleteOrder, shipOrders }
+  const settleOrder = async (order, items) => {
+    const { error } = await request('settle', { table: 'orders', id: order.id, revision: order.revision, items })
+    if (error) throw error
+    await load()
+  }
+  const collectOrder = async (order, paid) => {
+    const { error } = await request('collect', { table: 'orders', id: order.id, revision: order.revision, paid })
+    if (error) throw error
+    await load()
+  }
+  return { orders, loading, load, addOrder, updateOrder, deleteOrder, shipOrders, settleOrder, collectOrder }
 }
 
 // ─────────────────────────────────────────────
 //  Dashboard stats (computed from orders hook)
 // ─────────────────────────────────────────────
 export function useDashboardStats(orders, products, customers) {
-  const totalRevenue = orders.filter(o => o.payment_status === 'paid').reduce((s, o) => s + +o.total_amount, 0)
-  const unpaidAmount = orders.filter(o => o.payment_status === 'unpaid' && o.status === 'shipped').reduce((s, o) => s + +o.total_amount, 0)
+  const totalRevenue = orders.reduce((s, o) => s + collected(o), 0)
+  const unpaidAmount = orders.filter(o => o.status === 'shipped').reduce((s, o) => s + outstanding(o), 0)
   const pendingOrders = orders.filter(o => o.status === 'pending').length
   const totalStock = products.flatMap(p => p.variants || []).reduce((s, v) => s + +v.stock_qty, 0)
   const lowStock = products.flatMap(p => p.variants || []).filter(v => +v.stock_qty > 0 && +v.stock_qty <= 5).length

@@ -1,9 +1,9 @@
 import { neon } from '@neondatabase/serverless'
-import { createHash, timingSafeEqual, createHmac, randomUUID } from 'node:crypto'
+import { createHash, timingSafeEqual, createHmac } from 'node:crypto'
 const fields = {
  products: ['name','product_code','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
- customers: ['name','shop_name','line_nick','phone','address','customer_type','credit_limit','note'],
- orders: ['status','payment_status','shipped_at','note'],
+ customers: ['name','shop_name','line_nick','phone','address','customer_type','sale_mode','discount','credit_limit','note'],
+ orders: ['note'],
  returns: ['order_id','customer_id','product_name','color','size','qty','return_type','reason','refund_amount','note','status','resolved_at']
 }
 const fail = (message, status=400) => { throw Object.assign(new Error(message), {status}) }
@@ -64,21 +64,25 @@ export default async function handler(req,res) {
     sql`INSERT INTO product_variants(product_id,color,size,stock_qty) SELECT ${b.id}::uuid,color,size,stock_qty FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(color text,size text,stock_qty integer) ON CONFLICT(product_id,color,size) DO UPDATE SET stock_qty=EXCLUDED.stock_qty RETURNING *`
    ])
   } else if(action==='createOrder' && table==='orders') {
-   const f=b.record, id=randomUUID()
-   if(!Array.isArray(f.items)||!f.items.length||f.items.length>500) fail('訂單必須包含商品')
-   const items=f.items.map(i=>{if(!Number.isInteger(+i.qty)||+i.qty<1||!Number.isFinite(+i.price)||+i.price<0)fail('商品數量或價格錯誤');return {...i,qty:+i.qty,unit_price:+i.price}})
-   const total=items.reduce((s,i)=>s+Math.round(i.qty*i.unit_price*100),0)/100
-   data=await sql.transaction([
-    sql`INSERT INTO orders(id,customer_id,total_amount,note) VALUES(${id},${f.customer_id},${total},${f.note||null}) RETURNING *`,
-    sql`INSERT INTO order_items(order_id,variant_id,product_name,color,size,qty,unit_price) SELECT ${id}::uuid,variant_id,product_name,color,size,qty,unit_price FROM jsonb_to_recordset(${JSON.stringify(items)}::jsonb) AS x(variant_id uuid,product_name text,color text,size text,qty integer,unit_price numeric) RETURNING *`
-   ])
+   const f=b.record || {}
+   data=await sql`SELECT create_dealer_order(${f.customer_id}::uuid,${f.note||null},${JSON.stringify(f.items)}::jsonb,${f.discount}::numeric,${f.sale_mode}::text) AS id`
+  } else if(action==='settle' && table==='orders') {
+   data=await sql`SELECT settle_consignment(${b.id}::uuid,${b.revision}::integer,${JSON.stringify(b.items)}::jsonb)`
+  } else if(action==='collect' && table==='orders') {
+   if(typeof b.paid!=='boolean') fail('收款狀態錯誤')
+   data=await sql`SELECT collect_order(${b.id}::uuid,${b.revision}::integer,${b.paid}::boolean)`
   } else if(action==='ship' && table==='orders') {
    if(!Array.isArray(b.ids)||!b.ids.length||b.ids.length>500)fail('訂單清單錯誤')
-   data=await sql`UPDATE orders SET status='shipped',shipped_at=now() WHERE id=ANY(${b.ids}::uuid[]) RETURNING id`
+   data=await sql`UPDATE orders SET status='shipped',shipped_at=now() WHERE id=ANY(${b.ids}::uuid[]) AND status='pending' RETURNING id`
   } else if(action==='delete') {
    data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')
+   if(table==='customers') {
+    const f=b.record||{}
+    if('discount' in f && (f.discount===null || f.discount==='' || !Number.isFinite(+f.discount) || +f.discount<=0 || +f.discount>10 || Math.abs(+f.discount*100-Math.round(+f.discount*100))>0.000001)) fail('折數請填 0.01～10，六五折請填 6.5')
+    if('sale_mode' in f && !['buyout','consignment'].includes(f.sale_mode)) fail('合作方式錯誤')
+   }
    const entries=Object.entries(b.record||{}).filter(([k])=>fields[table].includes(k))
    if(!entries.length)fail('沒有可儲存的欄位')
    const image=b.record?.image_url
@@ -89,7 +93,7 @@ export default async function handler(req,res) {
   } else fail('不支援的操作')
   return res.status(200).json({data})
  } catch(e) {
-  const message=e.status?e.message:e.code==='23503'?'此資料已有訂單或退貨關聯，請保留原紀錄。':e.code==='23505'?'資料重複，請檢查後再試。':'資料儲存失敗，請檢查輸入或稍後重試。'
+  const message=e.status?e.message:e.code==='P0001'?e.message:e.code==='23503'?'此資料已有訂單或退貨關聯，請保留原紀錄。':e.code==='23505'?'資料重複，請檢查後再試。':'資料儲存失敗，請檢查輸入或稍後重試。'
   if(!e.status)console.error('Database operation failed',e.code || e.name)
   return res.status(e.status || 400).json({error:{message}})
  }
