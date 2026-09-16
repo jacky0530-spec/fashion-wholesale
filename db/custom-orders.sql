@@ -105,7 +105,7 @@ BEGIN
  IF ptype NOT IN ('deposit','balance','other') OR amount<=0 OR amount<>round(amount,2) THEN RAISE EXCEPTION '付款資料格式錯誤'; END IF;
  INSERT INTO custom_order_payments(id,custom_order_id,payment_date,payment_type,amount,note)
  VALUES(p_payment,p_order,(p_payload->>'payment_date')::date,ptype,amount,nullif(trim(p_payload->>'note'),'')) ON CONFLICT(id) DO NOTHING;
- SELECT coalesce(sum(amount),0) INTO total_paid FROM custom_order_payments WHERE custom_order_id=p_order;
+ SELECT coalesce(sum(p.amount),0) INTO total_paid FROM custom_order_payments p WHERE p.custom_order_id=p_order;
  IF total_paid>o.total_amount THEN RAISE EXCEPTION '累計收款不可超過訂購單總額'; END IF;
  UPDATE custom_orders SET paid_amount=total_paid,
   payment_status=CASE WHEN total_paid<=0 THEN 'unpaid' WHEN total_paid>=total_amount THEN 'paid' ELSE 'partial' END,
