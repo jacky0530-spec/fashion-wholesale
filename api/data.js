@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 import { createHash, timingSafeEqual, createHmac } from 'node:crypto'
 const fields = {
- purchases: [],
+ purchases: [], warehouses: [], inventory: [], transfers: [], consignment_settlements: [],
  products: ['name','product_code','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
  customers: ['name','shop_name','line_nick','phone','address','customer_type','sale_mode','discount','credit_limit','note'],
  orders: ['note'],
@@ -51,6 +51,10 @@ export default async function handler(req,res) {
   if(action==='list') {
    const selects={
     purchases:`SELECT p.id,p.purchase_no,p.purchase_date,p.supplier,p.warehouse,p.net_amount,p.tax_amount,p.total_amount,p.status,p.created_at,p.voided_at,COALESCE((SELECT json_agg(i ORDER BY i.product_name,i.color,i.size) FROM purchase_items i WHERE i.purchase_id=p.id),'[]') AS items FROM purchases p ORDER BY p.purchase_date DESC,p.created_at DESC`,
+    warehouses:`SELECT id,name,warehouse_type,sort_order,is_active,created_at FROM warehouses WHERE is_active ORDER BY sort_order,name`,
+    inventory:`SELECT pv.id AS variant_id,p.id AS product_id,p.product_code,p.name AS product_name,p.category,pv.color,pv.size,pv.stock_qty AS total_stock,COALESCE((SELECT jsonb_object_agg(w.name,COALESCE(wi.stock_qty,0) ORDER BY w.sort_order) FROM warehouses w LEFT JOIN warehouse_inventory wi ON wi.warehouse_id=w.id AND wi.variant_id=pv.id WHERE w.is_active),'{}'::jsonb) AS warehouse_stock FROM product_variants pv JOIN products p ON p.id=pv.product_id ORDER BY p.name,pv.color,pv.size`,
+    transfers:`SELECT t.id,t.transfer_no,t.transfer_date,t.note,t.status,t.created_at,t.voided_at,fw.name AS from_warehouse,tw.name AS to_warehouse,COALESCE((SELECT json_agg(json_build_object('id',i.id,'variant_id',i.variant_id,'qty',i.qty,'product_name',p.name,'product_code',p.product_code,'color',pv.color,'size',pv.size) ORDER BY p.name,pv.color,pv.size) FROM stock_transfer_items i JOIN product_variants pv ON pv.id=i.variant_id JOIN products p ON p.id=pv.product_id WHERE i.transfer_id=t.id),'[]') AS items FROM stock_transfers t JOIN warehouses fw ON fw.id=t.from_warehouse_id JOIN warehouses tw ON tw.id=t.to_warehouse_id ORDER BY t.transfer_date DESC,t.created_at DESC`,
+    consignment_settlements:`SELECT s.id,s.settlement_no,s.settlement_date,s.net_amount,s.tax_amount,s.total_amount,s.order_id,s.created_at,w.name AS warehouse,c.name AS customer_name,c.shop_name,COALESCE((SELECT json_agg(json_build_object('id',i.id,'variant_id',i.variant_id,'system_qty',i.system_qty,'counted_qty',i.counted_qty,'sold_qty',i.sold_qty,'unit_price',i.unit_price,'product_name',p.name,'product_code',p.product_code,'color',pv.color,'size',pv.size) ORDER BY p.name,pv.color,pv.size) FROM consignment_settlement_items i JOIN product_variants pv ON pv.id=i.variant_id JOIN products p ON p.id=pv.product_id WHERE i.settlement_id=s.id),'[]') AS items FROM consignment_settlements s JOIN warehouses w ON w.id=s.warehouse_id JOIN customers c ON c.id=s.customer_id ORDER BY s.settlement_date DESC,s.created_at DESC`,
     products:`SELECT p.*, COALESCE((SELECT json_agg(v ORDER BY v.created_at) FROM product_variants v WHERE v.product_id=p.id),'[]') AS variants FROM products p ORDER BY p.created_at DESC`,
     customers:'SELECT * FROM customers ORDER BY joined_at DESC',
     orders:`SELECT o.*, json_build_object('name',c.name,'shop_name',c.shop_name) AS customer, COALESCE((SELECT json_agg(i) FROM order_items i WHERE i.order_id=o.id),'[]') AS items FROM orders o JOIN customers c ON c.id=o.customer_id ORDER BY o.order_date DESC`,
@@ -60,6 +64,12 @@ export default async function handler(req,res) {
    data=await sql`SELECT post_purchase(${b.id}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
   } else if(action==='voidPurchase' && table==='purchases') {
    data=await sql`SELECT void_purchase(${b.id}::uuid)`
+  } else if(action==='postTransfer' && table==='transfers') {
+   data=await sql`SELECT post_stock_transfer(${b.id}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
+  } else if(action==='voidTransfer' && table==='transfers') {
+   data=await sql`SELECT void_stock_transfer(${b.id}::uuid)`
+  } else if(action==='settleWarehouseConsignment' && table==='consignment_settlements') {
+   data=await sql`SELECT settle_warehouse_consignment(${b.id}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
   } else if(action==='variants' && table==='products') {
    if(!Array.isArray(b.variants)||b.variants.length>500) fail('規格格式錯誤')
    const rows=b.variants.map(v=>{if(!v.color||!v.size||!Number.isInteger(+v.stock_qty)||+v.stock_qty<0)fail('規格或庫存數量錯誤');return {color:v.color,size:v.size,stock_qty:+v.stock_qty}})
@@ -81,7 +91,7 @@ export default async function handler(req,res) {
    if(!Array.isArray(b.ids)||!b.ids.length||b.ids.length>500)fail('訂單清單錯誤')
    data=await sql`UPDATE orders SET status='shipped',shipped_at=now() WHERE id=ANY(${b.ids}::uuid[]) AND status='pending' RETURNING id`
   } else if(action==='delete') {
-   if(table==='purchases') fail('進貨單請使用作廢功能，以保留紀錄並沖回庫存')
+   if(['purchases','transfers','consignment_settlements'].includes(table)) fail('此單據不可直接刪除，請使用單據流程保留紀錄')
    data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')
