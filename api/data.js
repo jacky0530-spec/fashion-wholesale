@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 import { createHash, timingSafeEqual, createHmac } from 'node:crypto'
 const fields = {
+ purchases: [],
  products: ['name','product_code','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
  customers: ['name','shop_name','line_nick','phone','address','customer_type','sale_mode','discount','credit_limit','note'],
  orders: ['note'],
@@ -49,11 +50,16 @@ export default async function handler(req,res) {
   let data
   if(action==='list') {
    const selects={
+    purchases:`SELECT p.id,p.purchase_no,p.purchase_date,p.supplier,p.warehouse,p.net_amount,p.tax_amount,p.total_amount,p.status,p.created_at,p.voided_at,COALESCE((SELECT json_agg(i ORDER BY i.product_name,i.color,i.size) FROM purchase_items i WHERE i.purchase_id=p.id),'[]') AS items FROM purchases p ORDER BY p.purchase_date DESC,p.created_at DESC`,
     products:`SELECT p.*, COALESCE((SELECT json_agg(v ORDER BY v.created_at) FROM product_variants v WHERE v.product_id=p.id),'[]') AS variants FROM products p ORDER BY p.created_at DESC`,
     customers:'SELECT * FROM customers ORDER BY joined_at DESC',
     orders:`SELECT o.*, json_build_object('name',c.name,'shop_name',c.shop_name) AS customer, COALESCE((SELECT json_agg(i) FROM order_items i WHERE i.order_id=o.id),'[]') AS items FROM orders o JOIN customers c ON c.id=o.customer_id ORDER BY o.order_date DESC`,
     returns:`SELECT r.*, json_build_object('name',c.name,'shop_name',c.shop_name) AS customer, json_build_object('order_date',o.order_date) AS "order" FROM returns r JOIN customers c ON c.id=r.customer_id LEFT JOIN orders o ON o.id=r.order_id ORDER BY r.created_at DESC`
    };data=await sql.query(selects[table])
+  } else if(action==='postPurchase' && table==='purchases') {
+   data=await sql`SELECT post_purchase(${b.id}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
+  } else if(action==='voidPurchase' && table==='purchases') {
+   data=await sql`SELECT void_purchase(${b.id}::uuid)`
   } else if(action==='variants' && table==='products') {
    if(!Array.isArray(b.variants)||b.variants.length>500) fail('規格格式錯誤')
    const rows=b.variants.map(v=>{if(!v.color||!v.size||!Number.isInteger(+v.stock_qty)||+v.stock_qty<0)fail('規格或庫存數量錯誤');return {color:v.color,size:v.size,stock_qty:+v.stock_qty}})
@@ -75,6 +81,7 @@ export default async function handler(req,res) {
    if(!Array.isArray(b.ids)||!b.ids.length||b.ids.length>500)fail('訂單清單錯誤')
    data=await sql`UPDATE orders SET status='shipped',shipped_at=now() WHERE id=ANY(${b.ids}::uuid[]) AND status='pending' RETURNING id`
   } else if(action==='delete') {
+   if(table==='purchases') fail('進貨單請使用作廢功能，以保留紀錄並沖回庫存')
    data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')

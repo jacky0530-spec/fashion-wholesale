@@ -7,10 +7,11 @@ import Orders    from './pages/Orders'
 import Reports   from './pages/Reports'
 import Inventory from './pages/Inventory'
 import Returns   from './pages/Returns'
+import Purchases from './pages/Purchases'
 
 const NAV = [
   { section: '總覽',  items: [{ path: '/',          label: '儀表板',   icon: '▦' }] },
-  { section: '商品',  items: [{ path: '/products',  label: '款式管理', icon: '✦' }, { path: '/inventory', label: '庫存管理', icon: '⊟' }] },
+  { section: '商品',  items: [{ path: '/products',  label: '款式管理', icon: '✦' }, { path: '/inventory', label: '庫存管理', icon: '⊟' }, { path: '/purchases', label: '進貨單', icon: '↓' }] },
   { section: '業務',  items: [
     { path: '/customers', label: '客戶管理', icon: '◈' },
     { path: '/orders',    label: '訂單管理', icon: '◎' },
@@ -71,6 +72,7 @@ export default function App({ onLogout, loggingOut }) {
         <Routes>
           <Route path="/"          element={<Dashboard showToast={showToast} />} />
           <Route path="/products"  element={<Products  showToast={showToast} />} />
+          <Route path="/purchases" element={<Purchases showToast={showToast} />} />
           <Route path="/inventory" element={<Inventory showToast={showToast} />} />
           <Route path="/customers" element={<Customers showToast={showToast} />} />
           <Route path="/orders"    element={<Orders    showToast={showToast} />} />
