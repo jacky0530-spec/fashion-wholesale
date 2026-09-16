@@ -24,7 +24,7 @@ try {
  const record={customer_id:customer.id,total_amount:1,discount:10,sale_mode:'buyout',items:[{variant_id:variant.id,qty:2,price:100,product_name:p.name,color:'黑色',size:'M'}]}
  await ok('createOrder',{table:'orders',record})
  order=(await ok('list',{table:'orders'})).find(x=>x.customer_id===customer.id)
- assert.equal(Number(order.total_amount),200);assert.equal(order.items.length,1)
+ assert.equal(Number(order.total_amount),210);assert.equal(order.items.length,1)
  const bad=await call('createOrder',{table:'orders',record:{...record,items:[{...record.items[0],variant_id:randomUUID()}]}})
  assert.equal(bad.code,400)
  assert.equal((await ok('list',{table:'orders'})).filter(x=>x.customer_id===customer.id).length,1)

@@ -1,4 +1,4 @@
-import { collected, outstanding, salesQty } from '../lib/accounting'
+import { collected, outstanding, salesQty, netSales } from '../lib/accounting'
 import React, { useState } from 'react'
 import { useOrders, useProducts, useCustomers, COLOR_MAP } from '../lib/data'
 import { exportOrders, exportReceivables, exportInventory, exportTopProducts } from '../lib/excel'
@@ -15,7 +15,7 @@ export default function Reports({ showToast }) {
   const unpaid = orders.filter(o => outstanding(o) > 0 && o.status === 'shipped')
   const totalRevenue  = paid.reduce((s, o) => s + collected(o), 0)
   const totalUnpaid   = unpaid.reduce((s, o) => s + outstanding(o), 0)
-  const totalSalesAmt = orders.reduce((s, o) => s + +o.total_amount, 0)
+  const totalSalesAmt = orders.reduce((s, o) => s + netSales(o), 0)
 
   const productSales = {}
   orders.forEach(o => (o.items || []).forEach(item => {
@@ -30,7 +30,7 @@ export default function Reports({ showToast }) {
   const custSales = {}
   orders.forEach(o => {
     if (!custSales[o.customer_id]) custSales[o.customer_id] = { name: o.customer_name, shop: o.shop_name, amount: 0, orders: 0 }
-    custSales[o.customer_id].amount += +o.total_amount
+    custSales[o.customer_id].amount += netSales(o)
     custSales[o.customer_id].orders += 1
   })
   const topCustomers = Object.values(custSales).sort((a, b) => b.amount - a.amount)
@@ -105,7 +105,7 @@ export default function Reports({ showToast }) {
       {/* CSV 匯出 */}
       <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>CSV</span>
       <button className="btn btn-ghost btn-sm" onClick={() => { exportOrders(orders); showToast('訂單報表已下載') }}>訂單報表</button>
-      <button className="btn btn-ghost btn-sm" onClick={() => { exportReceivables(orders); showToast('應收帳款已下載') }}>應收帳款</button>
+      <button className="btn btn-ghost btn-sm" onClick={() => { exportReceivables(orders); showToast('應收帳款（含稅）已下載') }}>應收帳款（含稅）</button>
       <button className="btn btn-ghost btn-sm" onClick={() => { exportInventory(products); showToast('庫存報表已下載') }}>庫存報表</button>
       <button className="btn btn-ghost btn-sm" onClick={() => { exportTopProducts(orders); showToast('熱銷款式已下載') }}>熱銷款式</button>
     </div>
@@ -157,11 +157,11 @@ export default function Reports({ showToast }) {
           <PrintHeader title="營收總覽" />
           <div className="stats-grid">
             <div className="stat-card gold">
-              <div className="stat-label">已收款收入</div>
+              <div className="stat-label">已收款（含稅）</div>
               <div className="stat-value">{totalRevenue.toLocaleString()}<span className="stat-unit">元</span></div>
             </div>
             <div className="stat-card red">
-              <div className="stat-label">應收帳款</div>
+              <div className="stat-label">應收帳款（含稅）</div>
               <div className="stat-value">{totalUnpaid.toLocaleString()}<span className="stat-unit">元</span></div>
             </div>
             <div className="stat-card blue">
@@ -177,7 +177,7 @@ export default function Reports({ showToast }) {
             </div>
           </div>
           <div className="card">
-            <div className="card-header"><span>應收帳款明細（已出貨未收款）</span></div>
+            <div className="card-header"><span>應收帳款（含稅）明細（已出貨未收款）</span></div>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -222,7 +222,7 @@ export default function Reports({ showToast }) {
         <div id="print-products" style={{ display: tab === 'products' ? 'block' : 'none' }}>
           <PrintHeader title="熱銷款式排行" />
           <div className="card">
-            <div className="card-header"><span>款式銷售排行</span></div>
+            <div className="card-header"><span>款式銷售排行（未稅）</span></div>
             <div style={{ padding: '20px' }}>
               {topProducts.length === 0 && <div className="empty-state"><div className="empty-icon">✦</div><p>尚無銷售資料</p></div>}
               {topProducts.map((p, i) => (

@@ -79,6 +79,7 @@ export default async function handler(req,res) {
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')
    if(table==='customers') {
+    if(action==='insert') b.record={...b.record, discount:b.record?.discount ?? (b.record?.sale_mode==='consignment' ? 6 : 5.5)}
     const f=b.record||{}
     if('discount' in f && (f.discount===null || f.discount==='' || !Number.isFinite(+f.discount) || +f.discount<=0 || +f.discount>10 || Math.abs(+f.discount*100-Math.round(+f.discount*100))>0.000001)) fail('折數請填 0.01～10，六五折請填 6.5')
     if('sale_mode' in f && !['buyout','consignment'].includes(f.sale_mode)) fail('合作方式錯誤')

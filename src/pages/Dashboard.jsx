@@ -30,11 +30,11 @@ export default function Dashboard() {
       <div className="page-body">
         <div className="stats-grid">
           <div className="stat-card gold">
-            <div className="stat-label">已收款收入</div>
+            <div className="stat-label">已收款（含稅）</div>
             <div className="stat-value">{stats.totalRevenue.toLocaleString()}<span className="stat-unit">元</span></div>
           </div>
           <div className="stat-card red">
-            <div className="stat-label">應收帳款</div>
+            <div className="stat-label">應收帳款（含稅）</div>
             <div className="stat-value">{stats.unpaidAmount.toLocaleString()}<span className="stat-unit">元</span></div>
           </div>
           <div className="stat-card blue">
@@ -54,7 +54,7 @@ export default function Dashboard() {
         )}
         {stats.unpaidAmount > 0 && (
           <div className="alert alert-red" style={{ marginBottom: 16 }}>
-            ● 應收帳款 <strong>NT$ {stats.unpaidAmount.toLocaleString()}</strong> 尚未收回
+            ● 應收帳款（含稅） <strong>NT$ {stats.unpaidAmount.toLocaleString()}</strong> 尚未收回
           </div>
         )}
 

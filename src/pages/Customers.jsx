@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useCustomers } from '../lib/data'
+import { defaultDiscount, dealerPrice, grossFor } from '../lib/accounting'
 
 export default function Customers({ showToast }) {
   const { customers, loading, addCustomer, updateCustomer, deleteCustomer } = useCustomers()
@@ -7,7 +8,7 @@ export default function Customers({ showToast }) {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: '', credit_limit: '', note: '' })
+  const [form, setForm] = useState({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: 5.5, credit_limit: '', note: '' })
 
   const filtered = customers.filter(c =>
     c.name.includes(search) || (c.shop_name || '').includes(search) ||
@@ -16,10 +17,10 @@ export default function Customers({ showToast }) {
 
   const openAdd = () => {
     setEditing(null)
-    setForm({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: '', credit_limit: '', note: '' })
+    setForm({ name: '', shop_name: '', line_nick: '', phone: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: 5.5, credit_limit: '', note: '' })
     setShowModal(true)
   }
-  const openEdit = (c) => { setEditing(c); setForm({ ...c, sale_mode: c.sale_mode || 'buyout', discount: c.discount ?? '', credit_limit: c.credit_limit || '' }); setShowModal(true) }
+  const openEdit = (c) => { setEditing(c); setForm({ ...c, sale_mode: c.sale_mode || 'buyout', discount: c.discount ?? defaultDiscount(c.sale_mode), credit_limit: c.credit_limit || '' }); setShowModal(true) }
 
   const handleSave = async () => {
     if (!form.name.trim()) return
@@ -83,7 +84,7 @@ export default function Customers({ showToast }) {
                       <span className={`badge ${c.customer_type === 'wholesale' ? 'badge-gold' : 'badge-blue'}`}>
                         {c.customer_type === 'wholesale' ? '經銷商' : '零售'}
                       </span>
-                      <div style={{ fontSize: 12, marginTop: 5 }}>{c.sale_mode === 'consignment' ? '寄賣' : '買斷'} · {c.discount == null ? '未設定折數' : `零售價 ${Number(c.discount)} 折`}</div>
+                      <div style={{ fontSize: 12, marginTop: 5 }}>{c.sale_mode === 'consignment' ? '寄賣' : '買斷'} · {c.discount == null ? '未設定折數' : `含稅零售價 ${Number(c.discount)} 折，稅另加`}</div>
                     </td>
                     <td className="mono" style={{ color: +c.credit_limit > 0 ? 'var(--gold)' : 'var(--text3)' }}>
                       {+c.credit_limit > 0 ? `NT$ ${(+c.credit_limit).toLocaleString()}` : '—'}
@@ -151,10 +152,10 @@ export default function Customers({ showToast }) {
                 </div>
               </div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label" htmlFor="sale-mode">合作方式</label><select id="sale-mode" className="form-control" value={form.sale_mode} onChange={e => setForm(f => ({ ...f, sale_mode: e.target.value }))}><option value="buyout">買斷</option><option value="consignment">寄賣（售出才收款）</option></select></div>
-                <div className="form-group"><label className="form-label" htmlFor="discount">零售價折數 *</label><input id="discount" className="form-control" type="number" min="0.01" max="10" step="0.01" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} placeholder="六五折填 6.5" /><small>6＝六折；6.5＝六五折；10＝原價</small></div>
+                <div className="form-group"><label className="form-label" htmlFor="sale-mode">合作方式</label><select id="sale-mode" className="form-control" value={form.sale_mode} onChange={e => setForm(f => ({ ...f, sale_mode: e.target.value, discount: defaultDiscount(e.target.value) }))}><option value="buyout">買斷</option><option value="consignment">寄賣（售出才收款）</option></select></div>
+                <div className="form-group"><label className="form-label" htmlFor="discount">折數（折後為未稅價） *</label><input id="discount" className="form-control" type="number" min="0.01" max="10" step="0.01" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} placeholder="五五折填 5.5" /><small>買斷預設 5.5 折；寄賣預設 6 折；均另加 5% 稅</small></div>
               </div>
-              <p style={{ marginBottom: 16, color: 'var(--text2)' }}>零售價 100 元 → 單價 {form.discount === '' ? '—' : (100 * +form.discount / 10).toFixed(2)} 元。變更條件僅適用新單。</p>
+              <p style={{ marginBottom: 16, color: 'var(--text2)' }}>含稅零售價 100 元 → 未稅成交價 {form.discount === '' ? '—' : dealerPrice(100, form.discount)} 元 → 另加 5% 稅後 {form.discount === '' ? '—' : grossFor(dealerPrice(100, form.discount))} 元。變更條件僅適用新單。</p>
               <div className="form-group">
                 <label className="form-label">備註</label>
                 <input className="form-control" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="例：每週三固定下單" />

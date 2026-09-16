@@ -141,7 +141,7 @@ export default function Products({ showToast }) {
                 <thead>
                   <tr>
                     <th style={{ width: 60 }}>圖片</th>
-                    <th>款式名稱</th><th>分類</th><th>進價</th><th>批發價</th><th>零售價</th>
+                    <th>款式名稱</th><th>分類</th><th>進價</th><th>批發價</th><th>零售價（含稅）</th>
                     <th>顏色／尺碼</th><th>庫存</th><th style={{ textAlign: 'right' }}>操作</th>
                   </tr>
                 </thead>
@@ -296,7 +296,7 @@ export default function Products({ showToast }) {
                     </div>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">零售定價</label>
+                    <label className="form-label">零售定價（含稅）</label>
                     <input className="form-control" type="number" value={form.retail_price} onChange={e => setForm(f => ({ ...f, retail_price: e.target.value }))} placeholder="0" />
                   </div>
                   {(+form.wholesale_price > 0 && +form.cost_price > 0) && (
