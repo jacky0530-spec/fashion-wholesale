@@ -99,9 +99,9 @@ export default async function handler(req,res) {
    data=await sql`SELECT collect_order(${b.id}::uuid,${b.revision}::integer,${b.paid}::boolean)`
   } else if(action==='ship' && table==='orders') {
    if(!Array.isArray(b.ids)||!b.ids.length||b.ids.length>500)fail('訂單清單錯誤')
-   data=await sql`UPDATE orders SET status='shipped',shipped_at=now() WHERE id=ANY(${b.ids}::uuid[]) AND status='pending' RETURNING id`
+   data=await sql`SELECT ship_orders(${b.ids}::uuid[]) AS id`
   } else if(action==='delete') {
-   if(['purchases','transfers','consignment_settlements','custom_orders'].includes(table)) fail('此單據不可直接刪除，請使用單據流程保留紀錄')
+   if(['purchases','transfers','consignment_settlements','custom_orders','orders'].includes(table)) fail('正式單據不可直接刪除，請保留交易與庫存紀錄')
    data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')
