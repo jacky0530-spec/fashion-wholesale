@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Products  from './pages/Products'
 import Customers from './pages/Customers'
 import Orders    from './pages/Orders'
+import CustomOrders from './pages/CustomOrders'
 import Reports   from './pages/Reports'
 import Inventory from './pages/Inventory'
 import Returns   from './pages/Returns'
@@ -14,7 +15,8 @@ const NAV = [
   { section: '商品',  items: [{ path: '/products',  label: '款式管理', icon: '✦' }, { path: '/inventory', label: '庫存管理', icon: '⊟' }, { path: '/purchases', label: '進貨單', icon: '↓' }] },
   { section: '業務',  items: [
     { path: '/customers', label: '客戶管理', icon: '◈' },
-    { path: '/orders',    label: '訂單管理', icon: '◎' },
+    { path: '/custom-orders', label: '自訂訂購單', icon: '◇' },
+    { path: '/orders',    label: '銷貨單', icon: '◎' },
     { path: '/returns',   label: '退換貨',   icon: '↩' },
   ]},
   { section: '分析',  items: [{ path: '/reports',   label: '銷售報表', icon: '◆' }] },
@@ -58,7 +60,7 @@ export default function App({ onLogout, loggingOut }) {
         </nav>
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-            <div>批發通 v1.3</div>
+            <div>批發通 v1.4</div>
             <div style={{ color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
               資料由 Neon 管理
@@ -75,6 +77,7 @@ export default function App({ onLogout, loggingOut }) {
           <Route path="/purchases" element={<Purchases showToast={showToast} />} />
           <Route path="/inventory" element={<Inventory showToast={showToast} />} />
           <Route path="/customers" element={<Customers showToast={showToast} />} />
+          <Route path="/custom-orders" element={<CustomOrders showToast={showToast} />} />
           <Route path="/orders"    element={<Orders    showToast={showToast} />} />
           <Route path="/returns"   element={<Returns   showToast={showToast} />} />
           <Route path="/reports"   element={<Reports   showToast={showToast} />} />
