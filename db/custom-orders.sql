@@ -117,7 +117,7 @@ BEGIN
 END $$;
 -- statement
 CREATE OR REPLACE FUNCTION convert_custom_order(p_id uuid,p_mappings jsonb) RETURNS uuid LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
-DECLARE o custom_orders%ROWTYPE; i record; x jsonb; vid uuid; pv record; main_id uuid; available integer; oid uuid:=gen_random_uuid(); mapped integer:=0;
+DECLARE o custom_orders%ROWTYPE; i record; vid uuid; vrow record; main_id uuid; available integer; oid uuid:=gen_random_uuid(); mapped integer:=0;
 BEGIN
  SELECT * INTO o FROM custom_orders WHERE id=p_id FOR UPDATE;
  IF NOT FOUND OR o.status<>'arrived' THEN RAISE EXCEPTION '只有已到貨訂購單可轉銷貨單'; END IF;
@@ -130,14 +130,14 @@ BEGIN
  FOR i IN SELECT * FROM custom_order_items WHERE custom_order_id=p_id ORDER BY sort_order,id LOOP
   SELECT (value->>'variant_id')::uuid INTO vid FROM jsonb_array_elements(p_mappings) WHERE value->>'item_id'=i.id::text;
   IF vid IS NULL THEN RAISE EXCEPTION '有品項尚未選擇商品規格'; END IF;
-  SELECT pv.id,pv.color,pv.size,pv.stock_qty,p.name,p.retail_price INTO pv FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE pv.id=vid FOR UPDATE OF pv;
+  SELECT pvar.id,pvar.color,pvar.size,pvar.stock_qty,p.name,p.retail_price INTO vrow FROM product_variants pvar JOIN products p ON p.id=pvar.product_id WHERE pvar.id=vid FOR UPDATE OF pvar;
   IF NOT FOUND THEN RAISE EXCEPTION '選擇的商品規格不存在'; END IF;
   SELECT stock_qty INTO available FROM warehouse_inventory WHERE warehouse_id=main_id AND variant_id=vid FOR UPDATE;
   IF coalesce(available,0)<i.qty THEN RAISE EXCEPTION '總倉庫存不足，請先用進貨單將自訂大貨入庫'; END IF;
   UPDATE warehouse_inventory SET stock_qty=stock_qty-i.qty,updated_at=now() WHERE warehouse_id=main_id AND variant_id=vid;
   UPDATE product_variants SET stock_qty=stock_qty-i.qty WHERE id=vid;
   UPDATE custom_order_items SET variant_id=vid WHERE id=i.id;
-  INSERT INTO order_items(order_id,variant_id,product_name,color,size,qty,unit_price,retail_price) VALUES(oid,vid,i.description,pv.color,pv.size,i.qty,i.unit_price,pv.retail_price);
+  INSERT INTO order_items(order_id,variant_id,product_name,color,size,qty,unit_price,retail_price) VALUES(oid,vid,i.description,vrow.color,vrow.size,i.qty,i.unit_price,vrow.retail_price);
   mapped:=mapped+1;
  END LOOP;
  IF mapped<>(SELECT count(*) FROM custom_order_items WHERE custom_order_id=p_id) THEN RAISE EXCEPTION '品項對應不完整'; END IF;
