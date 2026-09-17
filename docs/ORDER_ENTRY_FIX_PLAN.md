@@ -1,1 +1,0 @@
-Order entry bugfix: single-spec products should be directly addable to the cart, existing products without variants should receive a default F variant on demand, cart quantity supports direct integer input and +/- controls, and zero stock may be ordered but shipment remains stock-validated.
