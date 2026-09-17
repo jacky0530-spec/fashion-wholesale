@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual, createHmac } from 'node:crypto'
 const fields = {
  purchases: [], warehouses: [], inventory: [], transfers: [], consignment_settlements: [], custom_orders: [],
  products: ['name','product_code','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
- customers: ['name','shop_name','line_nick','phone','address','customer_type','sale_mode','discount','tax_mode','credit_limit','note'],
+ customers: ['name','shop_name','tax_id','line_nick','phone','contact_email','address','customer_type','sale_mode','discount','tax_mode','credit_limit','note'],
  orders: ['note'],
  returns: ['order_id','customer_id','product_name','color','size','qty','return_type','reason','refund_amount','note','status','resolved_at']
 }
