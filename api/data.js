@@ -52,16 +52,21 @@ export default async function handler(req,res) {
    const selects={
     purchases:`SELECT p.id,p.purchase_no,p.purchase_date,p.supplier,p.warehouse,p.net_amount,p.tax_amount,p.total_amount,p.status,p.created_at,p.voided_at,COALESCE((SELECT json_agg(i ORDER BY i.product_name,i.color,i.size) FROM purchase_items i WHERE i.purchase_id=p.id),'[]') AS items FROM purchases p ORDER BY p.purchase_date DESC,p.created_at DESC`,
     warehouses:`SELECT id,name,warehouse_type,sort_order,is_active,created_at FROM warehouses WHERE is_active ORDER BY sort_order,name`,
-    inventory:`SELECT pv.id AS variant_id,p.id AS product_id,p.product_code,p.name AS product_name,p.category,pv.color,pv.size,pv.stock_qty AS total_stock,COALESCE((SELECT jsonb_object_agg(w.name,COALESCE(wi.stock_qty,0) ORDER BY w.sort_order) FROM warehouses w LEFT JOIN warehouse_inventory wi ON wi.warehouse_id=w.id AND wi.variant_id=pv.id WHERE w.is_active),'{}'::jsonb) AS warehouse_stock FROM product_variants pv JOIN products p ON p.id=pv.product_id ORDER BY p.name,pv.color,pv.size`,
+    inventory:`SELECT pv.id AS variant_id,p.id AS product_id,p.product_code,p.name AS product_name,p.category,pv.color,pv.size,pv.stock_qty AS total_stock,COALESCE((SELECT jsonb_object_agg(w.name,COALESCE(wi.stock_qty,0) ORDER BY w.sort_order) FROM warehouses w LEFT JOIN warehouse_inventory wi ON wi.warehouse_id=w.id AND wi.variant_id=pv.id WHERE w.is_active),'{}'::jsonb) AS warehouse_stock FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE NOT p.is_bundle ORDER BY p.name,pv.color,pv.size`,
     transfers:`SELECT t.id,t.transfer_no,t.transfer_date,t.note,t.status,t.created_at,t.voided_at,fw.name AS from_warehouse,tw.name AS to_warehouse,COALESCE((SELECT json_agg(json_build_object('id',i.id,'variant_id',i.variant_id,'qty',i.qty,'product_name',p.name,'product_code',p.product_code,'color',pv.color,'size',pv.size) ORDER BY p.name,pv.color,pv.size) FROM stock_transfer_items i JOIN product_variants pv ON pv.id=i.variant_id JOIN products p ON p.id=pv.product_id WHERE i.transfer_id=t.id),'[]') AS items FROM stock_transfers t JOIN warehouses fw ON fw.id=t.from_warehouse_id JOIN warehouses tw ON tw.id=t.to_warehouse_id ORDER BY t.transfer_date DESC,t.created_at DESC`,
     consignment_settlements:`SELECT s.id,s.settlement_no,s.settlement_date,s.net_amount,s.tax_amount,s.total_amount,s.order_id,s.created_at,w.name AS warehouse,c.name AS customer_name,c.shop_name,COALESCE((SELECT json_agg(json_build_object('id',i.id,'variant_id',i.variant_id,'system_qty',i.system_qty,'counted_qty',i.counted_qty,'sold_qty',i.sold_qty,'unit_price',i.unit_price,'product_name',p.name,'product_code',p.product_code,'color',pv.color,'size',pv.size) ORDER BY p.name,pv.color,pv.size) FROM consignment_settlement_items i JOIN product_variants pv ON pv.id=i.variant_id JOIN products p ON p.id=pv.product_id WHERE i.settlement_id=s.id),'[]') AS items FROM consignment_settlements s JOIN warehouses w ON w.id=s.warehouse_id JOIN customers c ON c.id=s.customer_id ORDER BY s.settlement_date DESC,s.created_at DESC`,
     custom_orders:`SELECT o.*,json_build_object('name',c.name,'shop_name',c.shop_name) AS customer,COALESCE((SELECT json_agg(i ORDER BY i.sort_order,i.id) FROM custom_order_items i WHERE i.custom_order_id=o.id),'[]') AS items,COALESCE((SELECT json_agg(p ORDER BY p.payment_date,p.created_at) FROM custom_order_payments p WHERE p.custom_order_id=o.id),'[]') AS payments FROM custom_orders o JOIN customers c ON c.id=o.customer_id ORDER BY o.order_date DESC,o.created_at DESC`,
-    products:`SELECT p.*, COALESCE((SELECT json_agg(v ORDER BY v.created_at) FROM product_variants v WHERE v.product_id=p.id),'[]') AS variants FROM products p ORDER BY p.created_at DESC`,
+    products:`SELECT p.*,
+      COALESCE((SELECT jsonb_agg(to_jsonb(v) || jsonb_build_object('stock_qty',CASE WHEN p.is_bundle THEN COALESCE((SELECT min(floor(COALESCE(wi.stock_qty,0)::numeric/bc.qty))::integer FROM bundle_components bc JOIN warehouses w ON w.name='總倉' AND w.is_active LEFT JOIN warehouse_inventory wi ON wi.warehouse_id=w.id AND wi.variant_id=bc.component_variant_id WHERE bc.bundle_product_id=p.id),0) ELSE v.stock_qty END) ORDER BY v.created_at) FROM product_variants v WHERE v.product_id=p.id),'[]'::jsonb) AS variants,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('variant_id',bc.component_variant_id,'qty',bc.qty,'product_name',cp.name,'product_code',cp.product_code,'color',cv.color,'size',cv.size,'stock_qty',cv.stock_qty) ORDER BY cp.name,cv.color,cv.size) FROM bundle_components bc JOIN product_variants cv ON cv.id=bc.component_variant_id JOIN products cp ON cp.id=cv.product_id WHERE bc.bundle_product_id=p.id),'[]'::jsonb) AS bundle_components
+      FROM products p ORDER BY p.is_bundle,p.created_at DESC`,
     customers:'SELECT * FROM customers ORDER BY joined_at DESC',
     orders:`SELECT o.*, json_build_object('name',c.name,'shop_name',c.shop_name) AS customer, COALESCE((SELECT json_agg(i) FROM order_items i WHERE i.order_id=o.id),'[]') AS items FROM orders o JOIN customers c ON c.id=o.customer_id ORDER BY o.order_date DESC`,
     returns:`SELECT r.*, json_build_object('name',c.name,'shop_name',c.shop_name) AS customer, json_build_object('order_date',o.order_date) AS "order" FROM returns r JOIN customers c ON c.id=r.customer_id LEFT JOIN orders o ON o.id=r.order_id ORDER BY r.created_at DESC`
    };data=await sql.query(selects[table])
   } else if(action==='postPurchase' && table==='purchases') {
+   const ids=(b.record?.items||[]).map(i=>i.variant_id).filter(Boolean)
+   if(ids.length){const [check]=await sql`SELECT EXISTS(SELECT 1 FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE pv.id=ANY(${ids}::uuid[]) AND p.is_bundle) AS blocked`;if(check?.blocked)fail('組合商品不可直接進貨；請分別進 A、B 元件後再用組合商品銷售')}
    data=await sql`SELECT post_purchase(${b.id}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
   } else if(action==='voidPurchase' && table==='purchases') {
    data=await sql`SELECT void_purchase(${b.id}::uuid)`
@@ -79,8 +84,12 @@ export default async function handler(req,res) {
    data=await sql`SELECT record_custom_order_payment(${b.id}::uuid,${b.payment_id}::uuid,${JSON.stringify(b.record)}::jsonb)`
   } else if(action==='convertCustomOrder' && table==='custom_orders') {
    data=await sql`SELECT convert_custom_order(${b.id}::uuid,${JSON.stringify(b.mappings)}::jsonb) AS id`
+  } else if(action==='saveBundle' && table==='products') {
+   data=await sql`SELECT save_bundle_product(${b.id || null}::uuid,${JSON.stringify(b.record)}::jsonb) AS id`
   } else if(action==='variants' && table==='products') {
    if(!Array.isArray(b.variants)||b.variants.length>500) fail('規格格式錯誤')
+   const [kind]=await sql`SELECT is_bundle FROM products WHERE id=${b.id}::uuid FOR UPDATE`
+   if(kind?.is_bundle) fail('組合商品規格請到「組合商品」頁面管理')
    const rows=b.variants.map(v=>{if(!v.color||!v.size)fail('規格格式錯誤');return {color:v.color,size:v.size}})
    if(new Set(rows.map(v=>JSON.stringify([v.color,v.size]))).size!==rows.length) fail('規格重複')
    data=await sql.transaction([
@@ -126,7 +135,7 @@ export default async function handler(req,res) {
   } else fail('不支援的操作')
   return res.status(200).json({data})
  } catch(e) {
-  const message=e.status?e.message:e.code==='P0001'?e.message:e.code==='23503'?'此資料已有訂單或退貨關聯，請保留原紀錄。':e.code==='23505'?'資料重複，請檢查後再試。':'資料儲存失敗，請檢查輸入或稍後重試。'
+  const message=e.status?e.message:e.code==='P0001'?e.message:e.code==='23503'?'此資料已有交易或被組合商品使用，請保留原紀錄。':e.code==='23505'?'資料重複，請檢查後再試。':'資料儲存失敗，請檢查輸入或稍後重試。'
   if(!e.status)console.error('Database operation failed',e.code || e.name)
   return res.status(e.status || 400).json({error:{message}})
  }
