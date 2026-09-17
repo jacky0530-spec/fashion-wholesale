@@ -110,8 +110,13 @@ export default async function handler(req,res) {
    if(!Array.isArray(b.ids)||!b.ids.length||b.ids.length>500)fail('訂單清單錯誤')
    data=await sql`SELECT ship_orders(${b.ids}::uuid[]) AS id`
   } else if(action==='delete') {
-   if(['purchases','transfers','consignment_settlements','custom_orders','orders'].includes(table)) fail('正式單據不可直接刪除，請保留交易與庫存紀錄')
-   data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
+   if(table==='orders') {
+    data=await sql`DELETE FROM orders WHERE id=${b.id}::uuid AND status='pending' AND payment_status='unpaid' AND COALESCE(paid_amount,0)=0 RETURNING id`
+    if(!data.length) fail('只有「待出貨且未收款」的訂單可以刪除；已出貨或已有收款請走退貨／沖銷流程')
+   } else {
+    if(['purchases','transfers','consignment_settlements','custom_orders'].includes(table)) fail('正式單據不可直接刪除，請保留交易與庫存紀錄')
+    data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
+   }
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')
    if(table==='customers') {
