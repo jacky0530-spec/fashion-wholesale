@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useOrders, useProducts, useCustomers, COLOR_MAP } from '../lib/data'
 
-import { dealerPrice, collected, outstanding, modeLabel, roundMoney, taxFor, grossFor, taxModeLabel } from '../lib/accounting'
+import { dealerPrice, discountedPrice, collected, outstanding, modeLabel, roundMoney, taxFor, grossFor, taxModeLabel } from '../lib/accounting'
 import ConsignmentModal from './ConsignmentModal'
 
 const STATUS = { pending: { label: '待出貨', cls: 'badge-amber' }, shipped: { label: '已出貨', cls: 'badge-blue' }, returned: { label: '退貨', cls: 'badge-red' } }
@@ -40,8 +40,9 @@ export default function Orders({ showToast }) {
   const selectedCustomer = customers.find(c => c.id === custId)
   const selectedTaxMode = selectedCustomer?.tax_mode || 'exclusive'
   const cartNet = roundMoney(cartItems.reduce((s, i) => s + i.qty * i.price, 0))
-  const cartTax = taxFor(cartNet)
-  const cartTotal = grossFor(cartNet)
+  const inclusiveGross = selectedCustomer ? roundMoney(cartItems.reduce((s, i) => s + i.qty * discountedPrice(i.retail_price, selectedCustomer.discount), 0)) : 0
+  const cartTax = selectedTaxMode === 'inclusive' ? roundMoney(inclusiveGross - cartNet) : taxFor(cartNet)
+  const cartTotal = selectedTaxMode === 'inclusive' ? inclusiveGross : grossFor(cartNet)
 
   const openAdd = () => {
     setCustId(''); setCustSearch(''); setCartItems([]); setOrderNote('')
