@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual, createHmac } from 'node:crypto'
 const fields = {
  purchases: [], warehouses: [], inventory: [], transfers: [], consignment_settlements: [], custom_orders: [],
  products: ['name','product_code','category','cost_price','wholesale_price','retail_price','image_url','note','is_active'],
- customers: ['name','shop_name','line_nick','phone','address','customer_type','sale_mode','discount','credit_limit','note'],
+ customers: ['name','shop_name','line_nick','phone','address','customer_type','sale_mode','discount','tax_mode','credit_limit','note'],
  orders: ['note'],
  returns: ['order_id','customer_id','product_name','color','size','qty','return_type','reason','refund_amount','note','status','resolved_at']
 }
@@ -91,7 +91,7 @@ export default async function handler(req,res) {
   } else if(action==='createOrder' && table==='orders') {
    const f=b.record || {}
    if(f.sale_mode==='consignment') fail('寄賣請到「庫存管理」先調撥到客戶倉，月底再用「寄賣月結」結帳')
-   data=await sql`SELECT create_dealer_order(${f.customer_id}::uuid,${f.note||null},${JSON.stringify(f.items)}::jsonb,${f.discount}::numeric,${f.sale_mode}::text) AS id`
+   data=await sql`SELECT create_dealer_order(${f.customer_id}::uuid,${f.note||null},${JSON.stringify(f.items)}::jsonb,${f.discount}::numeric,${f.sale_mode}::text,${f.tax_mode || 'exclusive'}::text) AS id`
   } else if(action==='settle' && table==='orders') {
    data=await sql`SELECT settle_consignment(${b.id}::uuid,${b.revision}::integer,${JSON.stringify(b.items)}::jsonb)`
   } else if(action==='collect' && table==='orders') {
@@ -106,10 +106,15 @@ export default async function handler(req,res) {
   } else if(action==='insert'||action==='update') {
    if(action==='insert'&&table==='orders')fail('請使用訂單建立功能')
    if(table==='customers') {
-    if(action==='insert') b.record={...b.record, discount:b.record?.discount ?? (b.record?.sale_mode==='consignment' ? 6 : 5.5)}
+    if(action==='insert') {
+     const website=b.record?.customer_type==='website'
+     b.record={...b.record, discount:b.record?.discount ?? (website ? 10 : b.record?.sale_mode==='consignment' ? 6 : 5.5), tax_mode:b.record?.tax_mode ?? (website ? 'inclusive' : 'exclusive')}
+    }
     const f=b.record||{}
     if('discount' in f && (f.discount===null || f.discount==='' || !Number.isFinite(+f.discount) || +f.discount<=0 || +f.discount>10 || Math.abs(+f.discount*100-Math.round(+f.discount*100))>0.000001)) fail('折數請填 0.01～10，六五折請填 6.5')
     if('sale_mode' in f && !['buyout','consignment'].includes(f.sale_mode)) fail('合作方式錯誤')
+    if('tax_mode' in f && !['exclusive','inclusive'].includes(f.tax_mode)) fail('稅金方式錯誤')
+    if('customer_type' in f && !['wholesale','retail','website'].includes(f.customer_type)) fail('客戶類型錯誤')
    }
    const entries=Object.entries(b.record||{}).filter(([k])=>fields[table].includes(k))
    if(!entries.length)fail('沒有可儲存的欄位')
