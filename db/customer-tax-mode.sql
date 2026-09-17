@@ -3,7 +3,7 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS tax_mode text NOT NULL DEFAULT 'e
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_mode text NOT NULL DEFAULT 'exclusive' CHECK(tax_mode IN ('exclusive','inclusive'));
 -- statement
 CREATE OR REPLACE FUNCTION create_dealer_order(p_customer uuid,p_note text,p_items jsonb,p_discount numeric,p_mode text,p_tax_mode text) RETURNS uuid LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
-DECLARE c customers%ROWTYPE; v record; i jsonb; n integer; price numeric; discounted_gross numeric; retail numeric; oid uuid:=gen_random_uuid(); net_total numeric:=0; tax_total numeric:=0;
+DECLARE c customers%ROWTYPE; v record; i jsonb; n integer; price numeric; discounted_gross numeric; retail numeric; oid uuid:=gen_random_uuid(); net_total numeric:=0; gross_total numeric:=0; tax_total numeric:=0;
 BEGIN
  SELECT * INTO c FROM customers WHERE id=p_customer FOR SHARE;
  IF NOT FOUND OR c.discount IS NULL THEN RAISE EXCEPTION '請先在客戶管理設定折數'; END IF;
@@ -24,14 +24,15 @@ BEGIN
   IF price<0 OR (i->>'price')::numeric IS DISTINCT FROM price THEN RAISE EXCEPTION '商品價格或稅金方式已變更，請重新加入商品'; END IF;
   INSERT INTO order_items(order_id,variant_id,product_name,color,size,qty,unit_price,retail_price) VALUES(oid,v.id,v.name,v.color,v.size,n,price,retail);
   net_total:=net_total+n*price;
+  gross_total:=gross_total+n*discounted_gross;
  END LOOP;
- tax_total:=round(net_total*0.05,2);
+ tax_total:=CASE WHEN c.tax_mode='inclusive' THEN round(gross_total-net_total,2) ELSE round(net_total*0.05,2) END;
  UPDATE orders SET goods_net_amount=net_total,goods_amount=net_total+tax_total,net_amount=CASE WHEN c.sale_mode='consignment' THEN 0 ELSE net_total END,tax_amount=CASE WHEN c.sale_mode='consignment' THEN 0 ELSE tax_total END,total_amount=CASE WHEN c.sale_mode='consignment' THEN 0 ELSE net_total+tax_total END WHERE id=oid;
  RETURN oid;
 END $$;
 -- statement
 CREATE OR REPLACE FUNCTION settle_warehouse_consignment(p_id uuid,p_payload jsonb) RETURNS uuid LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
-DECLARE existing consignment_settlements%ROWTYPE; c customers%ROWTYPE; wid uuid; wtype text; x jsonb; v record; system_qty integer; counted integer; sold integer; price numeric; discounted_gross numeric; net numeric:=0; tax numeric:=0; oid uuid:=NULL; no text; item_count integer;
+DECLARE existing consignment_settlements%ROWTYPE; c customers%ROWTYPE; wid uuid; wtype text; x jsonb; v record; system_qty integer; counted integer; sold integer; price numeric; discounted_gross numeric; net numeric:=0; gross numeric:=0; tax numeric:=0; oid uuid:=NULL; no text; item_count integer;
 BEGIN
  IF p_id IS NULL OR nullif(p_payload->>'settlement_date','') IS NULL OR nullif(p_payload->>'warehouse','') IS NULL OR nullif(p_payload->>'customer_id','') IS NULL THEN RAISE EXCEPTION '請填月結日期、寄賣倉庫及客戶'; END IF;
  SELECT id,warehouse_type INTO wid,wtype FROM warehouses WHERE name=trim(p_payload->>'warehouse') AND is_active FOR SHARE;
@@ -68,9 +69,10 @@ BEGIN
    UPDATE product_variants SET stock_qty=stock_qty-sold WHERE id=v.id;
    INSERT INTO stock_movements(movement_type,variant_id,from_warehouse_id,qty,reference_type,reference_id,note) VALUES('consignment_sale',v.id,wid,sold,'consignment_settlement',p_id,no);
    net:=net+sold*price;
+   gross:=gross+sold*discounted_gross;
   END IF;
  END LOOP;
- tax:=round(net*0.05,2);
+ tax:=CASE WHEN c.tax_mode='inclusive' THEN round(gross-net,2) ELSE round(net*0.05,2) END;
  IF oid IS NOT NULL THEN UPDATE orders SET goods_net_amount=net,goods_amount=net+tax,net_amount=net,tax_amount=tax,total_amount=net+tax WHERE id=oid; END IF;
  UPDATE consignment_settlements SET order_id=oid,net_amount=net,tax_amount=tax,total_amount=net+tax WHERE id=p_id;
  RETURN p_id;
