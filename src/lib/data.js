@@ -84,6 +84,7 @@ export function useCustomers() {
 
   const addCustomer = async (form) => {
     const { error } = await request('insert', { table: 'customers', record: {
+      customer_name: form.customer_name?.trim() || null,
       name: form.name, shop_name: form.shop_name || null, tax_id: form.tax_id?.trim() || null,
       line_nick: form.line_nick || null, phone: form.phone || null, contact_email: form.contact_email?.trim() || null,
       address: form.address || null, customer_type: form.customer_type,
@@ -96,6 +97,7 @@ export function useCustomers() {
 
   const updateCustomer = async (id, form) => {
     const { error } = await request('update', { table: 'customers', id, record: {
+      customer_name: form.customer_name?.trim() || null,
       name: form.name, shop_name: form.shop_name || null, tax_id: form.tax_id?.trim() || null,
       line_nick: form.line_nick || null, phone: form.phone || null, contact_email: form.contact_email?.trim() || null,
       address: form.address || null, customer_type: form.customer_type,
@@ -125,7 +127,8 @@ export function useOrders() {
     if (error) { setLoading(false); return }
     const enriched = (data || []).map(o => ({
       ...o,
-      customer_name: o.customer?.name || '',
+      customer_name: o.customer?.customer_name || o.customer?.name || '',
+      contact_name: o.customer?.name || '',
       shop_name: o.customer?.shop_name || '',
     }))
     setOrders(enriched)
@@ -191,7 +194,8 @@ export function useReturns() {
     if (error) { setLoading(false); return }
     const enriched = (data || []).map(r => ({
       ...r,
-      customer_name: r.customer?.name || '',
+      customer_name: r.customer?.customer_name || r.customer?.name || '',
+      contact_name: r.customer?.name || '',
       shop_name: r.customer?.shop_name || '',
     }))
     setReturns(enriched)
