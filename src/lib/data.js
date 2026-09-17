@@ -14,9 +14,6 @@ export const COLORS = Object.keys(COLOR_MAP)
 export const SIZES  = ['F', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL']
 export const CATEGORIES = ['上衣', '下著', '洋裝', '外套', '配件', '襪子', '其他']
 
-// ─────────────────────────────────────────────
-//  Products
-// ─────────────────────────────────────────────
 export function useProducts() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -60,7 +57,6 @@ export function useProducts() {
     await load()
   }
 
-  // 以交易儲存規格，保留既有規格 ID
   const saveVariants = async (productId, variants) => {
     const { error } = await request('variants', { table: 'products', id: productId, variants })
     if (error) throw error
@@ -70,9 +66,6 @@ export function useProducts() {
   return { products, loading, error, load, addProduct, updateProduct, deleteProduct, saveVariants }
 }
 
-// ─────────────────────────────────────────────
-//  Customers
-// ─────────────────────────────────────────────
 export function useCustomers() {
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -93,7 +86,7 @@ export function useCustomers() {
       line_nick: form.line_nick || null, phone: form.phone || null,
       address: form.address || null, customer_type: form.customer_type,
       sale_mode: form.sale_mode, discount: form.discount === '' ? null : Number(form.discount),
-      credit_limit: +form.credit_limit || 0, note: form.note || null,
+      tax_mode: form.tax_mode || 'exclusive', credit_limit: +form.credit_limit || 0, note: form.note || null,
     } })
     if (error) throw error
     await load()
@@ -105,7 +98,7 @@ export function useCustomers() {
       line_nick: form.line_nick || null, phone: form.phone || null,
       address: form.address || null, customer_type: form.customer_type,
       sale_mode: form.sale_mode, discount: form.discount === '' ? null : Number(form.discount),
-      credit_limit: +form.credit_limit || 0, note: form.note || null,
+      tax_mode: form.tax_mode || 'exclusive', credit_limit: +form.credit_limit || 0, note: form.note || null,
     } })
     if (error) throw error
     await load()
@@ -120,9 +113,6 @@ export function useCustomers() {
   return { customers, loading, load, addCustomer, updateCustomer, deleteCustomer }
 }
 
-// ─────────────────────────────────────────────
-//  Orders
-// ─────────────────────────────────────────────
 export function useOrders() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -142,8 +132,8 @@ export function useOrders() {
 
   useEffect(() => { load() }, [load])
 
-  const addOrder = async ({ customer_id, total_amount, note, items, discount, sale_mode }) => {
-    const { error } = await request('createOrder', { table: 'orders', record: { customer_id, total_amount, note, items, discount, sale_mode } })
+  const addOrder = async ({ customer_id, total_amount, note, items, discount, sale_mode, tax_mode }) => {
+    const { error } = await request('createOrder', { table: 'orders', record: { customer_id, total_amount, note, items, discount, sale_mode, tax_mode } })
     if (error) throw error
     await load()
   }
@@ -179,21 +169,16 @@ export function useOrders() {
   return { orders, loading, load, addOrder, updateOrder, deleteOrder, shipOrders, settleOrder, collectOrder }
 }
 
-// ─────────────────────────────────────────────
-//  Dashboard stats (computed from orders hook)
-// ─────────────────────────────────────────────
 export function useDashboardStats(orders, products, customers) {
   const totalRevenue = orders.reduce((s, o) => s + collected(o), 0)
   const unpaidAmount = orders.filter(o => o.status === 'shipped').reduce((s, o) => s + outstanding(o), 0)
   const pendingOrders = orders.filter(o => o.status === 'pending').length
-  const totalStock = products.flatMap(p => p.variants || []).reduce((s, v) => s + +v.stock_qty, 0)
-  const lowStock = products.flatMap(p => p.variants || []).filter(v => +v.stock_qty > 0 && +v.stock_qty <= 5).length
+  const physicalProducts = products.filter(p => !p.is_bundle)
+  const totalStock = physicalProducts.flatMap(p => p.variants || []).reduce((s, v) => s + +v.stock_qty, 0)
+  const lowStock = physicalProducts.flatMap(p => p.variants || []).filter(v => +v.stock_qty > 0 && +v.stock_qty <= 5).length
   return { totalRevenue, unpaidAmount, pendingOrders, totalStock, lowStock, customerCount: customers.length }
 }
 
-// ─────────────────────────────────────────────
-//  Returns（退換貨）
-// ─────────────────────────────────────────────
 export function useReturns() {
   const [returns, setReturns] = useState([])
   const [loading, setLoading] = useState(true)
@@ -221,7 +206,7 @@ export function useReturns() {
       color:         form.color,
       size:          form.size,
       qty:           +form.qty,
-      return_type:   form.return_type,  // 'return' | 'exchange'
+      return_type:   form.return_type,
       reason:        form.reason,
       refund_amount: +form.refund_amount || 0,
       note:          form.note || null,
