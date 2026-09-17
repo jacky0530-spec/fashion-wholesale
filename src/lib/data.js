@@ -82,8 +82,8 @@ export function useCustomers() {
 
   const addCustomer = async (form) => {
     const { error } = await request('insert', { table: 'customers', record: {
-      name: form.name, shop_name: form.shop_name || null,
-      line_nick: form.line_nick || null, phone: form.phone || null,
+      name: form.name, shop_name: form.shop_name || null, tax_id: form.tax_id?.trim() || null,
+      line_nick: form.line_nick || null, phone: form.phone || null, contact_email: form.contact_email?.trim() || null,
       address: form.address || null, customer_type: form.customer_type,
       sale_mode: form.sale_mode, discount: form.discount === '' ? null : Number(form.discount),
       tax_mode: form.tax_mode || 'exclusive', credit_limit: +form.credit_limit || 0, note: form.note || null,
@@ -94,8 +94,8 @@ export function useCustomers() {
 
   const updateCustomer = async (id, form) => {
     const { error } = await request('update', { table: 'customers', id, record: {
-      name: form.name, shop_name: form.shop_name || null,
-      line_nick: form.line_nick || null, phone: form.phone || null,
+      name: form.name, shop_name: form.shop_name || null, tax_id: form.tax_id?.trim() || null,
+      line_nick: form.line_nick || null, phone: form.phone || null, contact_email: form.contact_email?.trim() || null,
       address: form.address || null, customer_type: form.customer_type,
       sale_mode: form.sale_mode, discount: form.discount === '' ? null : Number(form.discount),
       tax_mode: form.tax_mode || 'exclusive', credit_limit: +form.credit_limit || 0, note: form.note || null,
