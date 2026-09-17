@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useCustomers } from '../lib/data'
 import { defaultDiscount, dealerPrice, discountedPrice, grossFor, taxFor, taxModeLabel } from '../lib/accounting'
 
-const newCustomer = () => ({ name: '', shop_name: '', tax_id: '', line_nick: '', phone: '', contact_email: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: 5.5, tax_mode: 'exclusive', credit_limit: '', note: '' })
+const newCustomer = () => ({ customer_name: '', name: '', shop_name: '', tax_id: '', line_nick: '', phone: '', contact_email: '', address: '', customer_type: 'wholesale', sale_mode: 'buyout', discount: 5.5, tax_mode: 'exclusive', credit_limit: '', note: '' })
 const typeLabel = type => type === 'website' ? '官網客戶' : type === 'wholesale' ? '經銷商' : '零售客戶'
 
 export default function Customers({ showToast }) {
@@ -14,7 +14,7 @@ export default function Customers({ showToast }) {
   const [form, setForm] = useState(newCustomer())
 
   const filtered = customers.filter(c => {
-    const hay = `${c.name || ''} ${c.shop_name || ''} ${c.tax_id || ''} ${c.phone || ''} ${c.line_nick || ''} ${c.contact_email || ''}`.toLowerCase()
+    const hay = `${c.customer_name || ''} ${c.name || ''} ${c.shop_name || ''} ${c.tax_id || ''} ${c.phone || ''} ${c.line_nick || ''} ${c.contact_email || ''}`.toLowerCase()
     return hay.includes(search.toLowerCase())
   })
 
@@ -23,6 +23,7 @@ export default function Customers({ showToast }) {
     setEditing(c)
     setForm({
       ...c,
+      customer_name: c.customer_name || '',
       tax_id: c.tax_id || '',
       contact_email: c.contact_email || '',
       sale_mode: c.sale_mode || 'buyout',
@@ -61,27 +62,28 @@ export default function Customers({ showToast }) {
   return <>
     <div className="page-header">
       <div><h1 className="page-title">客戶管理</h1><div className="page-sub">CUSTOMERS · {customers.length} 位</div></div>
-      <div className="toolbar"><div className="search-bar" style={{ width: 280 }}><span className="search-icon">⊘</span><input placeholder="搜尋店名、統編、聯絡人、電話…" value={search} onChange={e => setSearch(e.target.value)} /></div><button className="btn btn-primary" onClick={openAdd}>＋ 新增客戶</button></div>
+      <div className="toolbar"><div className="search-bar" style={{ width: 300 }}><span className="search-icon">⊘</span><input placeholder="搜尋客戶名稱、店名、統編、聯絡人…" value={search} onChange={e => setSearch(e.target.value)} /></div><button className="btn btn-primary" onClick={openAdd}>＋ 新增客戶</button></div>
     </div>
 
-    <div className="page-body"><div className="card"><div className="table-wrap"><table><thead><tr><th>公司／店家</th><th>統編</th><th>聯絡人資訊</th><th>類型／條件</th><th>信用額度</th><th>備註</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead><tbody>
-      {loading && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32 }}><span className="spinner" /></td></tr>}
-      {!loading && filtered.length === 0 && <tr><td colSpan={7}><div className="empty-state"><div className="empty-icon">◈</div><p>尚無客戶資料</p></div></td></tr>}
+    <div className="page-body"><div className="card"><div className="table-wrap"><table><thead><tr><th>客戶名稱</th><th>公司／店家</th><th>統編</th><th>聯絡人資訊</th><th>類型／條件</th><th>信用額度</th><th>備註</th><th style={{ textAlign: 'right' }}>操作</th></tr></thead><tbody>
+      {loading && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32 }}><span className="spinner" /></td></tr>}
+      {!loading && filtered.length === 0 && <tr><td colSpan={8}><div className="empty-state"><div className="empty-icon">◈</div><p>尚無客戶資料</p></div></td></tr>}
       {filtered.map(c => <tr key={c.id}>
-        <td><div style={{ fontWeight: 600 }}>{c.shop_name || c.name}</div>{c.shop_name && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>聯絡人：{c.name}</div>}</td>
+        <td><div style={{ fontWeight: 700 }}>{c.customer_name || c.shop_name || c.name}</div>{!c.customer_name && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>未設定獨立客戶名稱</div>}</td>
+        <td><div style={{ fontWeight: 500 }}>{c.shop_name || '—'}</div>{c.address && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{c.address}</div>}</td>
         <td className="mono" style={{ color: c.tax_id ? 'var(--text2)' : 'var(--text3)' }}>{c.tax_id || '—'}</td>
         <td><div style={{ fontWeight: 500 }}>{c.name}</div><div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3, lineHeight: 1.6 }}>{c.phone || '無電話'}{c.line_nick ? ` · LINE ${c.line_nick}` : ''}<br />{c.contact_email || '無 Email'}</div></td>
         <td><span className={`badge ${c.customer_type === 'wholesale' ? 'badge-gold' : c.customer_type === 'website' ? 'badge-green' : 'badge-blue'}`}>{typeLabel(c.customer_type)}</span><div style={{ fontSize: 12, marginTop: 5 }}>{c.sale_mode === 'consignment' ? '寄賣' : '買斷'} · {c.discount == null ? '未設定折數' : `${Number(c.discount)} 折`} · {taxModeLabel(c.tax_mode || 'exclusive')}</div></td>
         <td className="mono" style={{ color: +c.credit_limit > 0 ? 'var(--gold)' : 'var(--text3)' }}>{+c.credit_limit > 0 ? `NT$ ${(+c.credit_limit).toLocaleString()}` : '—'}</td>
         <td style={{ color: 'var(--text3)', fontSize: 12 }}>{c.note || '—'}</td>
-        <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}><button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)}>✎ 編輯</button><button className="btn btn-danger btn-sm" onClick={async () => { if (confirm(`刪除客戶「${c.shop_name || c.name}」？`)) { await deleteCustomer(c.id); showToast('已刪除') } }}>✕</button></div></td>
+        <td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}><button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)}>✎ 編輯</button><button className="btn btn-danger btn-sm" onClick={async () => { if (confirm(`刪除客戶「${c.customer_name || c.shop_name || c.name}」？`)) { await deleteCustomer(c.id); showToast('已刪除') } }}>✕</button></div></td>
       </tr>)}
     </tbody></table></div></div></div>
 
     {showModal && <div className="modal-overlay" onClick={() => setShowModal(false)}><div className="modal" onClick={e => e.stopPropagation()}><div className="modal-header"><span className="modal-title">{editing ? '編輯客戶' : '新增客戶'}</span><button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowModal(false)}>✕</button></div><div className="modal-body">
-      <div style={{ padding: '0 0 8px', fontWeight: 700, color: 'var(--text2)' }}>公司／店家資料</div>
-      <div className="form-row"><div className="form-group"><label className="form-label">店家 / 公司名稱</label><input className="form-control" value={form.shop_name} onChange={e => setForm(f => ({ ...f, shop_name: e.target.value }))} placeholder="明日精品有限公司" /></div><div className="form-group"><label className="form-label">統一編號</label><input className="form-control mono" inputMode="numeric" value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))} placeholder="12345678" /></div></div>
-      <div className="form-group"><label className="form-label">收件地址</label><input className="form-control" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="台南市中西區…" /></div>
+      <div style={{ padding: '0 0 8px', fontWeight: 700, color: 'var(--text2)' }}>客戶／公司資料</div>
+      <div className="form-row"><div className="form-group"><label className="form-label">客戶名稱</label><input className="form-control" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="例：南區A級經銷商、王小姐官網客戶" /></div><div className="form-group"><label className="form-label">店家 / 公司名稱</label><input className="form-control" value={form.shop_name} onChange={e => setForm(f => ({ ...f, shop_name: e.target.value }))} placeholder="明日精品有限公司" /></div></div>
+      <div className="form-row"><div className="form-group"><label className="form-label">統一編號</label><input className="form-control mono" inputMode="numeric" value={form.tax_id} onChange={e => setForm(f => ({ ...f, tax_id: e.target.value }))} placeholder="12345678" /></div><div className="form-group"><label className="form-label">收件地址</label><input className="form-control" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="台南市中西區…" /></div></div>
 
       <div style={{ padding: '8px 0', marginTop: 2, fontWeight: 700, color: 'var(--text2)', borderTop: '1px solid var(--border)' }}>主要聯絡人資訊</div>
       <div className="form-row"><div className="form-group"><label className="form-label">聯絡人姓名 *</label><input className="form-control" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="王小明" /></div><div className="form-group"><label className="form-label">聯絡電話</label><input className="form-control" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="0912-345-678" /></div></div>
