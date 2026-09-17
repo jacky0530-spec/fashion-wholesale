@@ -58,9 +58,11 @@ export function useProducts() {
   }
 
   const saveVariants = async (productId, variants) => {
-    const { error } = await request('variants', { table: 'products', id: productId, variants })
+    const { data, error } = await request('variants', { table: 'products', id: productId, variants })
     if (error) throw error
+    const savedVariant = Array.isArray(data?.[2]) ? data[2][0] : null
     await load()
+    return savedVariant
   }
 
   return { products, loading, error, load, addProduct, updateProduct, deleteProduct, saveVariants }
