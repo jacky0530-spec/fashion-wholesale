@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Products  from './pages/Products'
+import Bundles from './pages/Bundles'
 import Customers from './pages/Customers'
 import Orders    from './pages/Orders'
 import CustomOrders from './pages/CustomOrders'
@@ -12,7 +13,7 @@ import Purchases from './pages/Purchases'
 
 const NAV = [
   { section: '總覽',  items: [{ path: '/',          label: '儀表板',   icon: '▦' }] },
-  { section: '商品',  items: [{ path: '/products',  label: '款式管理', icon: '✦' }, { path: '/inventory', label: '庫存管理', icon: '⊟' }, { path: '/purchases', label: '進貨單', icon: '↓' }] },
+  { section: '商品',  items: [{ path: '/products',  label: '款式管理', icon: '✦' }, { path: '/bundles', label: '組合商品', icon: '＋' }, { path: '/inventory', label: '庫存管理', icon: '⊟' }, { path: '/purchases', label: '進貨單', icon: '↓' }] },
   { section: '業務',  items: [
     { path: '/customers', label: '客戶管理', icon: '◈' },
     { path: '/custom-orders', label: '自訂訂購單', icon: '◇' },
@@ -60,7 +61,7 @@ export default function App({ onLogout, loggingOut }) {
         </nav>
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-            <div>批發通 v1.4</div>
+            <div>批發通 v1.5</div>
             <div style={{ color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
               資料由 Neon 管理
@@ -74,6 +75,7 @@ export default function App({ onLogout, loggingOut }) {
         <Routes>
           <Route path="/"          element={<Dashboard showToast={showToast} />} />
           <Route path="/products"  element={<Products  showToast={showToast} />} />
+          <Route path="/bundles" element={<Bundles showToast={showToast} />} />
           <Route path="/purchases" element={<Purchases showToast={showToast} />} />
           <Route path="/inventory" element={<Inventory showToast={showToast} />} />
           <Route path="/customers" element={<Customers showToast={showToast} />} />
