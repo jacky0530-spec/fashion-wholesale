@@ -111,8 +111,30 @@ export default async function handler(req,res) {
    data=await sql`SELECT ship_orders(${b.ids}::uuid[]) AS id`
   } else if(action==='delete') {
    if(table==='orders') {
-    data=await sql`DELETE FROM orders WHERE id=${b.id}::uuid AND status='pending' AND payment_status='unpaid' AND COALESCE(paid_amount,0)=0 RETURNING id`
-    if(!data.length) fail('只有「待出貨且未收款」的訂單可以刪除；已出貨或已有收款請走退貨／沖銷流程')
+    const [order]=await sql`SELECT id,status,sale_mode,payment_status,COALESCE(paid_amount,0) AS paid_amount,
+      EXISTS(SELECT 1 FROM returns r WHERE r.order_id=orders.id) AS has_return,
+      EXISTS(SELECT 1 FROM sales_stock_movements s WHERE s.order_id=orders.id AND s.movement_source='shipment') AS has_shipment,
+      EXISTS(SELECT 1 FROM sales_stock_movements s WHERE s.order_id=orders.id AND s.movement_source<>'shipment') AS has_other_movement
+      FROM orders WHERE id=${b.id}::uuid`
+    if(!order) fail('找不到訂單')
+    if(order.payment_status!=='unpaid' || Number(order.paid_amount)!==0) fail('此訂單已有收款，請先處理退款／沖銷後再操作')
+    if(order.sale_mode!=='buyout') fail('寄賣單不可直接刪除，請走寄賣月結／退回流程')
+    if(order.has_return) fail('此訂單已有退換貨紀錄，不能直接刪除')
+    if(order.status==='pending') {
+     data=await sql`DELETE FROM orders WHERE id=${b.id}::uuid AND status='pending' AND sale_mode='buyout' AND payment_status='unpaid' AND COALESCE(paid_amount,0)=0 AND NOT EXISTS(SELECT 1 FROM returns r WHERE r.order_id=orders.id) AND NOT EXISTS(SELECT 1 FROM sales_stock_movements s WHERE s.order_id=orders.id) RETURNING id`
+     if(!data.length) fail('此訂單狀態已變更，請重新整理後再試')
+    } else if(order.status==='shipped') {
+     if(!order.has_shipment || order.has_other_movement) fail('此已出貨訂單缺少可安全沖回的出貨紀錄，請勿直接刪除')
+     const tx=await sql.transaction([
+      sql`UPDATE orders SET status='__deleting__' WHERE id=${b.id}::uuid AND status='shipped' AND sale_mode='buyout' AND payment_status='unpaid' AND COALESCE(paid_amount,0)=0 AND NOT EXISTS(SELECT 1 FROM returns r WHERE r.order_id=orders.id) AND EXISTS(SELECT 1 FROM sales_stock_movements s WHERE s.order_id=orders.id AND s.movement_source='shipment') AND NOT EXISTS(SELECT 1 FROM sales_stock_movements s WHERE s.order_id=orders.id AND s.movement_source<>'shipment') RETURNING id`,
+      sql`UPDATE warehouse_inventory wi SET stock_qty=wi.stock_qty+x.qty,updated_at=now() FROM (SELECT s.warehouse_id,s.variant_id,SUM(s.qty)::integer AS qty FROM sales_stock_movements s JOIN orders o ON o.id=s.order_id WHERE s.order_id=${b.id}::uuid AND o.status='__deleting__' AND s.movement_source='shipment' GROUP BY s.warehouse_id,s.variant_id) x WHERE wi.warehouse_id=x.warehouse_id AND wi.variant_id=x.variant_id RETURNING wi.variant_id`,
+      sql`UPDATE product_variants pv SET stock_qty=pv.stock_qty+x.qty FROM (SELECT s.variant_id,SUM(s.qty)::integer AS qty FROM sales_stock_movements s JOIN orders o ON o.id=s.order_id WHERE s.order_id=${b.id}::uuid AND o.status='__deleting__' AND s.movement_source='shipment' GROUP BY s.variant_id) x WHERE pv.id=x.variant_id RETURNING pv.id`,
+      sql`DELETE FROM sales_stock_movements s USING orders o WHERE s.order_id=${b.id}::uuid AND o.id=s.order_id AND o.status='__deleting__' AND s.movement_source='shipment' RETURNING s.id`,
+      sql`DELETE FROM orders WHERE id=${b.id}::uuid AND status='__deleting__' AND NOT EXISTS(SELECT 1 FROM returns r WHERE r.order_id=orders.id) AND NOT EXISTS(SELECT 1 FROM sales_stock_movements s WHERE s.order_id=orders.id) RETURNING id`
+     ])
+     data=tx[4] || []
+     if(!data.length) fail('訂單刪除未完成，系統已停止操作；請重新整理後再試')
+    } else fail('只有待出貨，或「已出貨但完全未收款」的買斷訂單可以直接刪除')
    } else {
     if(['purchases','transfers','consignment_settlements','custom_orders'].includes(table)) fail('正式單據不可直接刪除，請保留交易與庫存紀錄')
     data=await sql.query(`DELETE FROM ${table} WHERE id=$1 RETURNING id`,[b.id])
